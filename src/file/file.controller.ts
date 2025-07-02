@@ -7,6 +7,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { extname, join } from 'path';
 import * as fs from 'fs';
 import { Response } from 'express';
+import { getRequestInfo } from 'src/utils/request-info';
 
 @Controller('file')
 export class FileController {
@@ -23,6 +24,7 @@ export class FileController {
       }
     })
   }))
+  
   uploadFile(@UploadedFile() file: Express.Multer.File, @Request() req) {
     return this.fileService.saveFileMetadata(file, req.user.userId);
   }
@@ -38,6 +40,40 @@ export class FileController {
   @UseGuards(AuthGuard('jwt'))
   @Get('download/:id')
   async getFile(@Param('id') id: string, @Request() req, @Res() res: Response) {
+    const { ipAddress, userAgent } = getRequestInfo(req);
+
+    const file = await this.fileService.getFileById(id);
+
+    if (!file) {
+      await this.fileService.logFailedAccess(id, ipAddress, userAgent, 'File not found in database');
+      throw new NotFoundException('File not found');
+    }
+
+    if (file.ownerId !== req.user.userId) {
+      await this.fileService.logFailedAccess(id, ipAddress, userAgent, 'Forbidden access');
+      throw new ForbiddenException('You do not have access to this file');
+    }
+
+    const filePath = join(__dirname, '..', '..', 'uploads', file.filename);
+
+    if (!fs.existsSync(filePath)) {
+      await this.fileService.logFailedAccess(id, ipAddress, userAgent, 'File does not exist on server');
+      throw new NotFoundException('File does not exist on server');
+    }
+
+    if (file.expiresAt && new Date() > file.expiresAt) {
+      await this.fileService.logFailedAccess(id, ipAddress, userAgent, 'File has expired');
+      throw new ForbiddenException('File has expired');
+    }
+
+    await this.fileService.logFileAccess(file.id, req.ip, req.headers['user-agent']);
+
+    return res.download(filePath, file.filename);
+  }
+
+  @UseGuards(AuthGuard('jwt'))
+  @Get('download/:id/access-logs')
+  async getFileAccessLogs(@Param('id') id: string, @Request() req) {
     const file = await this.fileService.getFileById(id);
 
     if (!file) {
@@ -48,12 +84,12 @@ export class FileController {
       throw new ForbiddenException('You do not have access to this file');
     }
 
-    const filePath = join(__dirname, '..', '..', 'uploads', file.filename);
+    return this.fileService.getAccessLogsByFileId(file.id);
+  }
 
-    if (!fs.existsSync(filePath)) {
-      throw new NotFoundException('File does not exist on server');
-    }
-
-    return res.download(filePath, file.filename);
+  @UseGuards(AuthGuard('jwt'))
+  @Get(':id/failed-logs')
+  async getFailedLogs(@Param('id') id: string, @Request() req) {
+    return this.fileService.getFailedAccessLogsByFileId(id);
   }
 }

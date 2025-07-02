@@ -40,3 +40,12 @@ model FileAccessLog {
   userAgent String
   accessedAt DateTime @default(now())
 }
+
+model FailedAccessLog {
+  id         String   @id @default(uuid())
+  fileId     String
+  ipAddress  String
+  userAgent  String
+  reason     String
+  accessedAt DateTime @default(now())
+}

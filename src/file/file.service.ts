@@ -28,15 +28,42 @@ export class FileService {
         return this.prisma.file.findMany({
             where: { ownerId: userId },
             select: {
-              id: true,
-              filename: true,
-              url: true,
-              createdAt: true,
-              expiresAt: true,
+                id: true,
+                filename: true,
+                url: true,
+                createdAt: true,
+                expiresAt: true,
             },
             orderBy: {
-              createdAt: 'desc',
+                createdAt: 'desc',
             },
-          });
+        });
+    }
+
+    async logFileAccess(fileId: string, ipAddress: string, userAgent: string) {
+        return this.prisma.fileAccessLog.create({
+            data: {
+                fileId,
+                ipAddress,
+                userAgent,
+            },
+        });
+    }
+
+    async getAccessLogsByFileId(fileId: string) {
+        return this.prisma.fileAccessLog.findMany({
+            where: { fileId },
+            orderBy: { accessedAt: 'desc' },
+        });
+    }
+    
+    async logFailedAccess(fileId: string, ipAddress: string, userAgent: string, reason: string) {
+        return this.prisma.failedAccessLog.create({
+            data: { fileId, ipAddress, userAgent, reason },
+        });
+    }
+
+    async getFailedAccessLogsByFileId(fileId: string) {
+        return this.prisma.failedAccessLog.findMany({ where: { fileId } });
     }
 }
