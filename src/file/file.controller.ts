@@ -26,7 +26,6 @@ export class FileController {
     })
   }))
   
-  @UsePipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true }))
   uploadFile(@UploadedFile() file: Express.Multer.File, @Request() req, @Body() uploadFileDto: UploadFileDto) {
     if (uploadFileDto.expiresAt) {
       const expiresDate = new Date(uploadFileDto.expiresAt);
