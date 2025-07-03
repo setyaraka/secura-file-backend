@@ -1,6 +1,7 @@
-import { Injectable } from '@nestjs/common';
+import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from 'src/prisma/prisma.service';
-import { Express } from 'express';
+import * as fs from 'fs';
+import { join } from 'path';
 
 @Injectable()
 export class FileService {
@@ -73,4 +74,44 @@ export class FileService {
     async getFailedAccessLogsByFileId(fileId: string) {
         return this.prisma.failedAccessLog.findMany({ where: { fileId } });
     }
+
+    async deleteFile(fileId: string, userId: string) {
+        const file = await this.prisma.file.findUnique({ where: { id: fileId } });
+
+        if (!file) {
+          throw new NotFoundException('File not found');
+        }
+
+        if (file.ownerId !== userId) {
+          throw new ForbiddenException('You do not have permission to delete this file');
+        }
+
+        const filePath = join(__dirname, '..', '..', 'uploads', file.filename);
+        if (fs.existsSync(filePath)) {
+          fs.unlinkSync(filePath);
+        }
+
+        await this.prisma.file.delete({ where: { id: fileId } });
+      
+        return { message: 'File deleted successfully' };
+    }
+
+    async getFileLogs(fileId: string, userId: string) {
+        const file = await this.prisma.file.findUnique({ where: { id: fileId } });
+        if (!file) throw new NotFoundException('File not found');
+        if (file.ownerId !== userId) throw new ForbiddenException('You do not have access to this file log');
+      
+        const accessLogs = await this.prisma.fileAccessLog.findMany({
+          where: { fileId },
+          orderBy: { accessedAt: 'desc' },
+        });
+      
+        const failedLogs = await this.prisma.failedAccessLog.findMany({
+          where: { fileId },
+          orderBy: { accessedAt: 'desc' },
+        });
+      
+        return { accessLogs, failedLogs };
+    }
+      
 }

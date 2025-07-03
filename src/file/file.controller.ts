@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, ForbiddenException, Get, NotFoundException, Param, Post, Request, Res, UploadedFile, UseGuards, UseInterceptors, UsePipes, ValidationPipe } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Delete, ForbiddenException, Get, NotFoundException, Param, Post, Request, Res, UploadedFile, UseGuards, UseInterceptors, UsePipes, ValidationPipe } from '@nestjs/common';
 import { FileService } from './file.service';
 import { AuthGuard } from '@nestjs/passport';
 import { FileInterceptor } from '@nestjs/platform-express';
@@ -104,5 +104,17 @@ export class FileController {
   @Get(':id/failed-logs')
   async getFailedLogs(@Param('id') id: string, @Request() req) {
     return this.fileService.getFailedAccessLogsByFileId(id);
+  }
+
+  @UseGuards(AuthGuard('jwt'))
+  @Delete(':id')
+  async deleteFile(@Param('id') id: string, @Request() req) {
+    return this.fileService.deleteFile(id, req.user.userId);
+  }
+
+  @UseGuards(AuthGuard('jwt'))
+  @Get(':id/logs')
+  async getFileLogs(@Param('id') id: string, @Request() req) {
+    return this.fileService.getFileLogs(id, req.user.userId);
   }
 }
