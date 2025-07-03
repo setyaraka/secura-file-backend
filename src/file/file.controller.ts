@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, Delete, ForbiddenException, Get, NotFoundException, Param, Post, Request, Res, UploadedFile, UseGuards, UseInterceptors, UsePipes, ValidationPipe } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Delete, ForbiddenException, Get, NotFoundException, Param, Post, Query, Request, Res, UploadedFile, UseGuards, UseInterceptors, UsePipes, ValidationPipe } from '@nestjs/common';
 import { FileService } from './file.service';
 import { AuthGuard } from '@nestjs/passport';
 import { FileInterceptor } from '@nestjs/platform-express';
@@ -9,6 +9,7 @@ import * as fs from 'fs';
 import { Response } from 'express';
 import { getRequestInfo } from 'src/utils/request-info';
 import { UploadFileDto } from './dto/upload-file.dto';
+import { PaginationDto } from 'src/common/dto/pagination.dto';
 
 @Controller('file')
 export class FileController {
@@ -44,10 +45,10 @@ export class FileController {
 
   @UseGuards(AuthGuard('jwt'))
   @Get('my-files')
-  async getMyFiles(@Request() req) {
+  async getMyFiles(@Request() req, @Query() paginationDto: PaginationDto,) {
     const userId = req.user.userId;
     
-    return this.fileService.getFilesByUser(userId);
+    return this.fileService.getFilesByUser(userId, paginationDto.page, paginationDto.limit);
   }
 
   @UseGuards(AuthGuard('jwt'))
@@ -86,7 +87,11 @@ export class FileController {
 
   @UseGuards(AuthGuard('jwt'))
   @Get('download/:id/access-logs')
-  async getFileAccessLogs(@Param('id') id: string, @Request() req) {
+  async getFileAccessLogs(
+    @Param('id') id: string, 
+    @Request() req,
+    @Query() paginationDto: PaginationDto,
+  ) {
     const file = await this.fileService.getFileById(id);
 
     if (!file) {
@@ -97,13 +102,18 @@ export class FileController {
       throw new ForbiddenException('You do not have access to this file');
     }
 
-    return this.fileService.getAccessLogsByFileId(file.id);
+    return this.fileService.getAccessLogsByFileId(file.id, paginationDto.page, paginationDto.limit);
   }
 
   @UseGuards(AuthGuard('jwt'))
-  @Get(':id/failed-logs')
-  async getFailedLogs(@Param('id') id: string, @Request() req) {
-    return this.fileService.getFailedAccessLogsByFileId(id);
+  @Get('download/:id/failed-logs')
+  async getFailedLogs(
+    @Param('id') id: string, 
+    @Request() req,
+    @Query() paginationDto: PaginationDto,
+  ) {
+
+    return this.fileService.getFailedAccessLogsByFileId(id, paginationDto.page, paginationDto.limit);
   }
 
   @UseGuards(AuthGuard('jwt'))
@@ -114,7 +124,12 @@ export class FileController {
 
   @UseGuards(AuthGuard('jwt'))
   @Get(':id/logs')
-  async getFileLogs(@Param('id') id: string, @Request() req) {
-    return this.fileService.getFileLogs(id, req.user.userId);
+  async getFileLogs(
+    @Param('id') id: string, 
+    @Request() req,
+    @Query() paginationDto: PaginationDto,
+  ) {
+
+    return this.fileService.getFileLogs(id, req.user.userId, paginationDto.page, paginationDto.limit);
   }
 }

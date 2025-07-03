@@ -32,20 +32,36 @@ export class FileService {
         });
     }
 
-    async getFilesByUser(userId: string) {
-        return this.prisma.file.findMany({
-            where: { ownerId: userId },
-            select: {
-                id: true,
-                filename: true,
-                url: true,
-                createdAt: true,
-                expiresAt: true,
-            },
-            orderBy: {
-                createdAt: 'desc',
-            },
-        });
+    async getFilesByUser(userId: string, page = 1, limit = 10) {
+        const skip = (page - 1) * limit;
+        const [logs, total] = await Promise.all([
+            this.prisma.file.findMany({
+                where: { ownerId: userId },
+                select: {
+                    id: true,
+                    filename: true,
+                    url: true,
+                    createdAt: true,
+                    expiresAt: true,
+                },
+                orderBy: {
+                    createdAt: 'desc',
+                },
+                skip,
+                take: limit,
+            }),
+            this.prisma.file.count({
+                where: { ownerId: userId },
+            }),
+        ]);
+        
+        return {
+            total,
+            page,
+            limit,
+            totalPages: Math.ceil(total / limit),
+            data: logs,
+        };
     }
 
     async logFileAccess(fileId: string, ipAddress: string, userAgent: string) {
@@ -58,11 +74,22 @@ export class FileService {
         });
     }
 
-    async getAccessLogsByFileId(fileId: string) {
-        return this.prisma.fileAccessLog.findMany({
-            where: { fileId },
-            orderBy: { accessedAt: 'desc' },
-        });
+    async getAccessLogsByFileId(fileId: string, page = 1, limit = 10) {
+        const skip = (page - 1) * limit;
+
+        const [logs, total] = await Promise.all([
+            this.prisma.fileAccessLog.findMany({
+                where: { fileId },
+                orderBy: { accessedAt: 'desc' },
+                skip,
+                take: limit,
+            }),
+            this.prisma.fileAccessLog.count({
+                where: { fileId },
+            }),
+        ]);
+
+        return { data: logs, total, page, limit, totalPages: Math.ceil(total / limit) };
     }
     
     async logFailedAccess(fileId: string, ipAddress: string, userAgent: string, reason: string) {
@@ -71,8 +98,28 @@ export class FileService {
         });
     }
 
-    async getFailedAccessLogsByFileId(fileId: string) {
-        return this.prisma.failedAccessLog.findMany({ where: { fileId } });
+    async getFailedAccessLogsByFileId(fileId: string, page = 1, limit = 10) {
+        const skip = (page - 1) * limit;
+
+        const [logs, total] = await Promise.all([
+            this.prisma.failedAccessLog.findMany({
+                where: { fileId },
+                orderBy: { accessedAt: 'desc' },
+                skip,
+                take: limit,
+            }),
+            this.prisma.failedAccessLog.count({
+                where: { fileId },
+            }),
+        ]);
+
+        return {
+            data: logs,
+            total,
+            page,
+            limit,
+            totalPages: Math.ceil(total / limit),
+        };
     }
 
     async deleteFile(fileId: string, userId: string) {
@@ -96,22 +143,36 @@ export class FileService {
         return { message: 'File deleted successfully' };
     }
 
-    async getFileLogs(fileId: string, userId: string) {
+    async getFileLogs(fileId: string, userId: string, page = 1, limit = 10) {
         const file = await this.prisma.file.findUnique({ where: { id: fileId } });
         if (!file) throw new NotFoundException('File not found');
         if (file.ownerId !== userId) throw new ForbiddenException('You do not have access to this file log');
       
-        const accessLogs = await this.prisma.fileAccessLog.findMany({
-          where: { fileId },
-          orderBy: { accessedAt: 'desc' },
-        });
+        const skip = (page - 1) * limit;
+
+        const [accessLogs, accessTotal] = await Promise.all([
+            this.prisma.fileAccessLog.findMany({
+                where: { fileId },
+                orderBy: { accessedAt: 'desc' },
+                skip,
+                take: limit,
+            }),
+            this.prisma.fileAccessLog.count({ where: { fileId } })
+        ]);
+
+        const [failedLogs, failedTotal] = await Promise.all([
+            this.prisma.failedAccessLog.findMany({
+                where: { fileId },
+                orderBy: { accessedAt: 'desc' },
+                skip,
+                take: limit,
+            }),
+            this.prisma.failedAccessLog.count({ where: { fileId } })
+        ]);
       
-        const failedLogs = await this.prisma.failedAccessLog.findMany({
-          where: { fileId },
-          orderBy: { accessedAt: 'desc' },
-        });
-      
-        return { accessLogs, failedLogs };
+        return {
+            accessLogs: { total: accessTotal, page, limit, data: accessLogs },
+            failedLogs: { total: failedTotal, page, limit, data: failedLogs }
+        };
     }
-      
 }
