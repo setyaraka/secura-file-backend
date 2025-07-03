@@ -6,12 +6,19 @@ import { Express } from 'express';
 export class FileService {
     constructor (private prisma: PrismaService) {}
 
-    async saveFileMetadata(file: Express.Multer.File, userId: string) {
+    async saveFileMetadata(file: Express.Multer.File, userId: string, expiresAt?: string) {
+        const expirationDate = expiresAt ? new Date(expiresAt) : (() => {
+            const defaultExpiration = new Date();
+            defaultExpiration.setDate(defaultExpiration.getDate() + 7);
+            return defaultExpiration;
+        })();
+    
         const savedFile = await this.prisma.file.create({
             data: {
-            filename: file.filename,
-            url: `uploads/${file.filename}`,
-            ownerId: userId,
+                filename: file.filename,
+                url: `uploads/${file.filename}`,
+                ownerId: userId,
+                expiresAt: expirationDate,
             }
         });
 

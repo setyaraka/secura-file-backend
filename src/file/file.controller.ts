@@ -1,4 +1,4 @@
-import { Controller, ForbiddenException, Get, NotFoundException, Param, Post, Request, Res, UploadedFile, UseGuards, UseInterceptors } from '@nestjs/common';
+import { BadRequestException, Body, Controller, ForbiddenException, Get, NotFoundException, Param, Post, Request, Res, UploadedFile, UseGuards, UseInterceptors, UsePipes, ValidationPipe } from '@nestjs/common';
 import { FileService } from './file.service';
 import { AuthGuard } from '@nestjs/passport';
 import { FileInterceptor } from '@nestjs/platform-express';
@@ -8,6 +8,7 @@ import { extname, join } from 'path';
 import * as fs from 'fs';
 import { Response } from 'express';
 import { getRequestInfo } from 'src/utils/request-info';
+import { UploadFileDto } from './dto/upload-file.dto';
 
 @Controller('file')
 export class FileController {
@@ -25,8 +26,21 @@ export class FileController {
     })
   }))
   
-  uploadFile(@UploadedFile() file: Express.Multer.File, @Request() req) {
-    return this.fileService.saveFileMetadata(file, req.user.userId);
+  @UsePipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true }))
+  uploadFile(@UploadedFile() file: Express.Multer.File, @Request() req, @Body() uploadFileDto: UploadFileDto) {
+    if (uploadFileDto.expiresAt) {
+      const expiresDate = new Date(uploadFileDto.expiresAt);
+      const now = new Date();
+
+      if (isNaN(expiresDate.getTime())) {
+        throw new BadRequestException('Invalid date format for expiresAt. Use YYYY-MM-DD or ISO format.');
+      }
+
+      if (expiresDate <= now) {
+        throw new BadRequestException('Expiration date must be in the future.');
+      }
+    }
+    return this.fileService.saveFileMetadata(file, req.user.userId, uploadFileDto.expiresAt);
   }
 
   @UseGuards(AuthGuard('jwt'))
