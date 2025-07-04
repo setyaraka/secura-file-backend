@@ -22,20 +22,21 @@ model User {
 }
 
 model File {
-  id            String      @id @default(uuid())
+  id            String           @id @default(uuid())
   filename      String
   url           String
   ownerId       String
-  owner         User        @relation(fields: [ownerId], references: [id])
+  owner         User             @relation(fields: [ownerId], references: [id])
   accessLogs    FileAccessLog[]
+  failedLogs    FailedAccessLog[]
   expiresAt     DateTime?
-  createdAt     DateTime    @default(now())
+  createdAt     DateTime         @default(now())
 }
 
 model FileAccessLog {
   id        String   @id @default(uuid())
   fileId    String
-  file      File     @relation(fields: [fileId], references: [id])
+  file      File     @relation(fields: [fileId], references: [id], onDelete: Cascade)
   ipAddress String
   userAgent String
   accessedAt DateTime @default(now())
@@ -44,8 +45,17 @@ model FileAccessLog {
 model FailedAccessLog {
   id         String   @id @default(uuid())
   fileId     String
+  file       File     @relation(fields: [fileId], references: [id], onDelete: Cascade) // relasi dan cascade
   ipAddress  String
   userAgent  String
   reason     String
   accessedAt DateTime @default(now())
+}
+
+model FileDeletionFailureLog {
+  id        String   @id @default(uuid())
+  fileId    String
+  fileName  String
+  reason    String
+  createdAt DateTime @default(now())
 }

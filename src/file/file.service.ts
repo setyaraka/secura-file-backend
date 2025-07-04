@@ -175,4 +175,28 @@ export class FileService {
             failedLogs: { total: failedTotal, page, limit, data: failedLogs }
         };
     }
+
+    async getExpiredFiles() {
+        return this.prisma.file.findMany({
+            where: {
+                expiresAt: { lt: new Date() },
+            },
+        });
+    }
+    
+    async permanentlyDeleteFile(fileId: string) {
+        return this.prisma.file.delete({ where: { id: fileId } });
+    }
+
+    async bulkDeleteFiles(fileIds: string[]) {
+        return this.prisma.file.deleteMany({
+            where: { id: { in: fileIds } },
+        });
+    }
+    
+    async logFileDeletionFailure(fileId: string, fileName: string, reason: string) {
+        return this.prisma.fileDeletionFailureLog.create({
+          data: { fileId, fileName, reason },
+        });
+      }
 }
