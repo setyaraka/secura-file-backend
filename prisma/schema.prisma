@@ -28,6 +28,7 @@ model File {
   ownerId       String
   owner         User             @relation(fields: [ownerId], references: [id])
   accessLogs    FileAccessLog[]
+  password      String?
   failedLogs    FailedAccessLog[]
   expiresAt     DateTime?
   createdAt     DateTime         @default(now())

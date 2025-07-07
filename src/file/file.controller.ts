@@ -26,8 +26,10 @@ export class FileController {
       }
     })
   }))
-  
-  uploadFile(@UploadedFile() file: Express.Multer.File, @Request() req, @Body() uploadFileDto: UploadFileDto) {
+  uploadFile(
+    @UploadedFile() file: Express.Multer.File, 
+    @Request() req, 
+    @Body() uploadFileDto: UploadFileDto) {
     if (uploadFileDto.expiresAt) {
       const expiresDate = new Date(uploadFileDto.expiresAt);
       const now = new Date();
@@ -40,7 +42,7 @@ export class FileController {
         throw new BadRequestException('Expiration date must be in the future.');
       }
     }
-    return this.fileService.saveFileMetadata(file, req.user.userId, uploadFileDto.expiresAt);
+    return this.fileService.saveFileMetadata(file, req.user.userId, uploadFileDto.password, uploadFileDto.expiresAt);
   }
 
   @UseGuards(AuthGuard('jwt'))
@@ -53,7 +55,12 @@ export class FileController {
 
   @UseGuards(AuthGuard('jwt'))
   @Get('download/:id')
-  async getFile(@Param('id') id: string, @Request() req, @Res() res: Response) {
+  async getFile(
+    @Param('id') id: string, 
+    @Request() req,
+    @Res() res: Response,
+    @Query('password') password?: string,
+  ) {
     const { ipAddress, userAgent } = getRequestInfo(req);
 
     const file = await this.fileService.getFileById(id);
@@ -63,9 +70,16 @@ export class FileController {
       throw new NotFoundException('File not found');
     }
 
-    if (file.ownerId !== req.user.userId) {
-      await this.fileService.logFailedAccess(id, ipAddress, userAgent, 'Forbidden access');
-      throw new ForbiddenException('You do not have access to this file');
+    if (file.ownerId !== req.user.userId ) {
+      if (file.password) {
+        if (file.password !== password) {
+          await this.fileService.logFailedAccess(file.id, ipAddress, userAgent, 'Incorrect password');
+          throw new ForbiddenException('Incorrect password for this file');
+        }
+      } else {
+        await this.fileService.logFailedAccess(file.id, ipAddress, userAgent, 'Forbidden access');
+        throw new ForbiddenException('You do not have access to this file');
+      }
     }
 
     const filePath = join(__dirname, '..', '..', 'uploads', file.filename);

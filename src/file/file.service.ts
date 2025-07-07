@@ -7,7 +7,7 @@ import { join } from 'path';
 export class FileService {
     constructor (private prisma: PrismaService) {}
 
-    async saveFileMetadata(file: Express.Multer.File, userId: string, expiresAt?: string) {
+    async saveFileMetadata(file: Express.Multer.File, userId: string, password?: string, expiresAt?: string) {
         const expirationDate = expiresAt ? new Date(expiresAt) : (() => {
             const defaultExpiration = new Date();
             defaultExpiration.setDate(defaultExpiration.getDate() + 7);
@@ -20,6 +20,7 @@ export class FileService {
                 url: `uploads/${file.filename}`,
                 ownerId: userId,
                 expiresAt: expirationDate,
+                password: password || null
             }
         });
 
