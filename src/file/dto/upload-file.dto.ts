@@ -1,6 +1,9 @@
-import { IsDateString, IsOptional, IsString } from "class-validator";
+import { IsDateString, IsEnum, IsOptional, IsString } from "class-validator";
 
 export class UploadFileDto {
+    @IsEnum(['private', 'password_protected', 'public'])
+    visibility: 'private' | 'password_protected' | 'public';
+
     @IsOptional()
     @IsString()
     password?: string;

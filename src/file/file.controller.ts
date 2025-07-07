@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, Delete, ForbiddenException, Get, NotFoundException, Param, Post, Query, Request, Res, UploadedFile, UseGuards, UseInterceptors, UsePipes, ValidationPipe } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Delete, ForbiddenException, Get, NotFoundException, Param, Patch, Post, Query, Request, Res, UploadedFile, UseGuards, UseInterceptors, UsePipes, ValidationPipe } from '@nestjs/common';
 import { FileService } from './file.service';
 import { AuthGuard } from '@nestjs/passport';
 import { FileInterceptor } from '@nestjs/platform-express';
@@ -10,6 +10,7 @@ import { Response } from 'express';
 import { getRequestInfo } from 'src/utils/request-info';
 import { UploadFileDto } from './dto/upload-file.dto';
 import { PaginationDto } from 'src/common/dto/pagination.dto';
+import { UpdateVisibilityDto } from './dto/update-visibility.dto';
 
 @Controller('file')
 export class FileController {
@@ -42,7 +43,7 @@ export class FileController {
         throw new BadRequestException('Expiration date must be in the future.');
       }
     }
-    return this.fileService.saveFileMetadata(file, req.user.userId, uploadFileDto.password, uploadFileDto.expiresAt);
+    return this.fileService.saveFileMetadata(file, req.user.userId, uploadFileDto);
   }
 
   @UseGuards(AuthGuard('jwt'))
@@ -82,6 +83,23 @@ export class FileController {
       }
     }
 
+    if (file.expiresAt && new Date() > file.expiresAt) {
+      await this.fileService.logFailedAccess(id, ipAddress, userAgent, 'File has expired');
+      throw new ForbiddenException('File has expired');
+    }
+
+    if (file.visibility === 'private' && file.ownerId !== req.user.userId) {
+      await this.fileService.logFailedAccess(id, ipAddress, userAgent, 'Forbidden access');
+      throw new ForbiddenException('You do not have access to this file');
+    }
+  
+    if (file.visibility === 'password_protected' && file.ownerId !== req.user.userId) {
+      if (!password || password !== file.password) {
+        await this.fileService.logFailedAccess(id, ipAddress, userAgent, 'Invalid password');
+        throw new ForbiddenException('Invalid password');
+      }
+    }
+
     const filePath = join(__dirname, '..', '..', 'uploads', file.filename);
 
     if (!fs.existsSync(filePath)) {
@@ -89,10 +107,6 @@ export class FileController {
       throw new NotFoundException('File does not exist on server');
     }
 
-    if (file.expiresAt && new Date() > file.expiresAt) {
-      await this.fileService.logFailedAccess(id, ipAddress, userAgent, 'File has expired');
-      throw new ForbiddenException('File has expired');
-    }
 
     await this.fileService.logFileAccess(file.id, req.ip, req.headers['user-agent']);
 
@@ -146,4 +160,15 @@ export class FileController {
 
     return this.fileService.getFileLogs(id, req.user.userId, paginationDto.page, paginationDto.limit);
   }
+
+  @UseGuards(AuthGuard('jwt'))
+  @Patch(':id/visibility')
+  async updateVisibility(
+    @Param('id') id: string,
+    @Request() req,
+    @Body() updateVisibilityDto: UpdateVisibilityDto,
+  ) {
+    return this.fileService.updateFileVisibility(id, req.user.userId, updateVisibilityDto);
+  }
+
 }

@@ -2,12 +2,16 @@ import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/commo
 import { PrismaService } from 'src/prisma/prisma.service';
 import * as fs from 'fs';
 import { join } from 'path';
+import { UploadFileDto } from './dto/upload-file.dto';
+import { UpdateVisibilityDto } from './dto/update-visibility.dto';
 
 @Injectable()
 export class FileService {
     constructor (private prisma: PrismaService) {}
 
-    async saveFileMetadata(file: Express.Multer.File, userId: string, password?: string, expiresAt?: string) {
+    async saveFileMetadata(file: Express.Multer.File, userId: string, UploadFileDto: UploadFileDto) {
+        const { visibility, password, expiresAt } = UploadFileDto;
+
         const expirationDate = expiresAt ? new Date(expiresAt) : (() => {
             const defaultExpiration = new Date();
             defaultExpiration.setDate(defaultExpiration.getDate() + 7);
@@ -20,6 +24,7 @@ export class FileService {
                 url: `uploads/${file.filename}`,
                 ownerId: userId,
                 expiresAt: expirationDate,
+                visibility,
                 password: password || null
             }
         });
@@ -197,7 +202,28 @@ export class FileService {
     
     async logFileDeletionFailure(fileId: string, fileName: string, reason: string) {
         return this.prisma.fileDeletionFailureLog.create({
-          data: { fileId, fileName, reason },
+            data: { fileId, fileName, reason },
         });
-      }
+    }
+
+    async updateFileVisibility(fileId: string, userId: string, updateVisibilityDto: UpdateVisibilityDto) {
+        const file = await this.prisma.file.findUnique({ where: { id: fileId } });
+      
+        if (!file) {
+            throw new NotFoundException('File not found');
+        }
+      
+        if (file.ownerId !== userId) {
+            throw new ForbiddenException('You do not have permission to update this file');
+        }
+      
+        return this.prisma.file.update({
+            where: { id: fileId },
+            data: {
+                visibility: updateVisibilityDto.visibility,
+                password: updateVisibilityDto.visibility === 'password_protected' ? updateVisibilityDto.password : null,
+            },
+        });
+    }
+      
 }

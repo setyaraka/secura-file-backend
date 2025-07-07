@@ -28,6 +28,7 @@ model File {
   ownerId       String
   owner         User             @relation(fields: [ownerId], references: [id])
   accessLogs    FileAccessLog[]
+  visibility    String           @default("private") // private | password_protected | public
   password      String?
   failedLogs    FailedAccessLog[]
   expiresAt     DateTime?
