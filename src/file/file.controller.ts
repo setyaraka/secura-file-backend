@@ -7,7 +7,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { extname, join } from 'path';
 import * as fs from 'fs';
 import { Response } from 'express';
-import { getRequestInfo } from 'src/utils/request-info';
+import { getContentType, getRequestInfo } from 'src/utils/request-info';
 import { UpdateFileMetadataDto } from './dto/upload-file.dto';
 import { PaginationDto } from 'src/common/dto/pagination.dto';
 import { UpdateVisibilityDto } from './dto/update-visibility.dto';
@@ -214,6 +214,49 @@ export class FileController {
   ) {
 
     return this.fileService.getFailedAccessLogsByFileId(id, paginationDto.page, paginationDto.limit);
+  }
+
+  @Get('preview/:id')
+  async previewFile(
+    @Param('id') id: string,
+    @Res() res: Response,
+    @Request() req,
+    @Query('password') password?: string,
+  ) {
+    const { ipAddress, userAgent } = getRequestInfo(req);
+
+    const file = await this.fileService.getFileById(id);
+    if (!file) throw new NotFoundException('File not found');
+
+    // Cek expired
+    if (file.expiresAt && new Date() > file.expiresAt) {
+      throw new ForbiddenException('File has expired');
+    }
+
+    // Cek visibilitas
+    if (file.visibility === 'private') {
+      if (!req.user || file.ownerId !== req.user.userId) {
+        throw new ForbiddenException('Access denied');
+      }
+    } else if (file.visibility === 'password_protected') {
+      if (!password || password !== file.password) {
+        throw new ForbiddenException('Incorrect password');
+      }
+    }
+
+    const filePath = join(__dirname, '..', '..', 'uploads', file.filename);
+    if (!fs.existsSync(filePath)) {
+      throw new NotFoundException('File not found on server');
+    }
+
+    // Tambah Content-Type biar bisa di-preview
+    const contentType = getContentType(file.filename); // Buat helper dari ekstensi
+    res.setHeader('Content-Type', contentType);
+
+    // Log akses
+    await this.fileService.logFileAccess(file.id, ipAddress, userAgent);
+
+    return res.sendFile(filePath);
   }
 
   @UseGuards(AuthGuard('jwt'))
