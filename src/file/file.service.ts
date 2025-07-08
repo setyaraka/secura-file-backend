@@ -1,36 +1,13 @@
-import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from 'src/prisma/prisma.service';
 import * as fs from 'fs';
 import { join } from 'path';
-import { UploadFileDto } from './dto/upload-file.dto';
+import { UpdateFileMetadataDto } from './dto/upload-file.dto';
 import { UpdateVisibilityDto } from './dto/update-visibility.dto';
 
 @Injectable()
 export class FileService {
     constructor (private prisma: PrismaService) {}
-
-    async saveFileMetadata(file: Express.Multer.File, userId: string, UploadFileDto: UploadFileDto) {
-        const { visibility, password, expiresAt } = UploadFileDto;
-
-        const expirationDate = expiresAt ? new Date(expiresAt) : (() => {
-            const defaultExpiration = new Date();
-            defaultExpiration.setDate(defaultExpiration.getDate() + 7);
-            return defaultExpiration;
-        })();
-    
-        const savedFile = await this.prisma.file.create({
-            data: {
-                filename: file.filename,
-                url: `uploads/${file.filename}`,
-                ownerId: userId,
-                expiresAt: expirationDate,
-                visibility,
-                password: password || null
-            }
-        });
-
-        return { message: 'File uploaded successfully', file: savedFile };
-    }
 
     async getFileById(id: string) {
         return this.prisma.file.findUnique({
@@ -225,5 +202,50 @@ export class FileService {
             },
         });
     }
+    
+    async incrementDownloadCount(fileId: string) {
+        return this.prisma.file.update({
+            where: { id: fileId },
+            data: { downloadCount: { increment: 1 } },
+        });
+    }
+
+    async createEmptyFileRecord(file: Express.Multer.File, userId: string) {
+        return this.prisma.file.create({
+            data: {
+                filename: file.filename,
+                url: `uploads/${file.filename}`,
+                ownerId: userId,
+            },
+        });
+    }
+
+    async updateFileMetadata(dto: UpdateFileMetadataDto, userId: string) {
+        const { fileId, visibility, password, expiresAt, downloadLimit } = dto;
+      
+        const file = await this.prisma.file.findUnique({ where: { id: fileId } });
+        if (!file) throw new NotFoundException('File not found');
+        if (file.ownerId !== userId) throw new ForbiddenException('You do not own this file');
+      
+        let expirationDate: Date | null = file.expiresAt;
+
+        if (expiresAt) {
+        const parsedDate = new Date(expiresAt);
+        if (isNaN(parsedDate.getTime())) {
+            throw new BadRequestException('Invalid date format for expiresAt. Use ISO format like YYYY-MM-DDTHH:mm:ssZ');
+        }
+        expirationDate = parsedDate;
+        }
+      
+        return this.prisma.file.update({
+            where: { id: fileId },
+            data: {
+                visibility,
+                password: password || null,
+                expiresAt: expirationDate,
+                downloadLimit: downloadLimit ?? null,
+            },
+        });
+      }
       
 }

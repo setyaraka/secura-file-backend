@@ -1,8 +1,16 @@
-import { IsDateString, IsEnum, IsOptional, IsString } from "class-validator";
+import { IsDateString, IsEnum, IsInt, IsOptional, IsString, Min } from "class-validator";
 
-export class UploadFileDto {
+export class UpdateFileMetadataDto {
+    @IsString()
+    fileId: string;
+
     @IsEnum(['private', 'password_protected', 'public'])
     visibility: 'private' | 'password_protected' | 'public';
+
+    @IsOptional()
+    @IsInt()
+    @Min(1)
+    downloadLimit?: number;
 
     @IsOptional()
     @IsString()

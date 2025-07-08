@@ -8,7 +8,7 @@ import { extname, join } from 'path';
 import * as fs from 'fs';
 import { Response } from 'express';
 import { getRequestInfo } from 'src/utils/request-info';
-import { UploadFileDto } from './dto/upload-file.dto';
+import { UpdateFileMetadataDto } from './dto/upload-file.dto';
 import { PaginationDto } from 'src/common/dto/pagination.dto';
 import { UpdateVisibilityDto } from './dto/update-visibility.dto';
 
@@ -24,15 +24,24 @@ export class FileController {
       filename: (req, file, cb) => {
         const uniqueName = `${uuidv4()}${extname(file.originalname)}`;
         cb(null, uniqueName);
-      }
-    })
+      },
+    }),
   }))
-  uploadFile(
-    @UploadedFile() file: Express.Multer.File, 
-    @Request() req, 
-    @Body() uploadFileDto: UploadFileDto) {
-    if (uploadFileDto.expiresAt) {
-      const expiresDate = new Date(uploadFileDto.expiresAt);
+  async uploadFile(@UploadedFile() file: Express.Multer.File, @Request() req) {
+    const savedFile = await this.fileService.createEmptyFileRecord(file, req.user.userId);
+
+    return {
+      message: 'File uploaded successfully',
+      fileId: savedFile.id,
+      filename: savedFile.filename,
+    };
+  }
+
+  @UseGuards(AuthGuard('jwt'))
+  @Patch('metadata')
+  async updateMetadata(@Body() metadataDto: UpdateFileMetadataDto, @Request() req) {
+    if (metadataDto.expiresAt) {
+      const expiresDate = new Date(metadataDto.expiresAt);
       const now = new Date();
 
       if (isNaN(expiresDate.getTime())) {
@@ -43,7 +52,7 @@ export class FileController {
         throw new BadRequestException('Expiration date must be in the future.');
       }
     }
-    return this.fileService.saveFileMetadata(file, req.user.userId, uploadFileDto);
+    return this.fileService.updateFileMetadata(metadataDto, req.user.userId);
   }
 
   @UseGuards(AuthGuard('jwt'))
@@ -67,7 +76,6 @@ export class FileController {
     const file = await this.fileService.getFileById(id);
 
     if (!file) {
-      await this.fileService.logFailedAccess(id, ipAddress, userAgent, 'File not found in database');
       throw new NotFoundException('File not found');
     }
 
@@ -100,6 +108,11 @@ export class FileController {
       }
     }
 
+    if (file.downloadLimit !== null && file.downloadCount >= file.downloadLimit) {
+      await this.fileService.logFailedAccess(id, ipAddress, userAgent, 'Download limit exceeded');
+      throw new ForbiddenException('Download limit exceeded');
+    }
+
     const filePath = join(__dirname, '..', '..', 'uploads', file.filename);
 
     if (!fs.existsSync(filePath)) {
@@ -107,8 +120,8 @@ export class FileController {
       throw new NotFoundException('File does not exist on server');
     }
 
-
     await this.fileService.logFileAccess(file.id, req.ip, req.headers['user-agent']);
+    await this.fileService.incrementDownloadCount(file.id);
 
     return res.download(filePath, file.filename);
   }

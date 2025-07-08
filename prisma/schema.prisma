@@ -31,6 +31,8 @@ model File {
   visibility    String           @default("private") // private | password_protected | public
   password      String?
   failedLogs    FailedAccessLog[]
+  downloadLimit Int?             
+  downloadCount Int              @default(0) 
   expiresAt     DateTime?
   createdAt     DateTime         @default(now())
 }
