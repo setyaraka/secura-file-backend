@@ -259,4 +259,35 @@ export class FileService {
         };
     }
       
+    async getUserStats(userId: string) {
+        const [totalFiles, expiredFiles, privateFiles, publicFiles, passwordProtectedFiles, totalDownloads] = await Promise.all([
+            this.prisma.file.count({ where: { ownerId: userId } }),
+            this.prisma.file.count({
+                where: {
+                ownerId: userId,
+                expiresAt: { lt: new Date() },
+                },
+            }),
+            this.prisma.file.count({ where: { ownerId: userId, visibility: 'private' } }),
+            this.prisma.file.count({ where: { ownerId: userId, visibility: 'public' } }),
+            this.prisma.file.count({ where: { ownerId: userId, visibility: 'password_protected' } }),
+            this.prisma.fileAccessLog.count({
+                where: {
+                file: {
+                    ownerId: userId,
+                },
+                },
+            }),
+        ]);
+      
+        return {
+            totalFiles,
+            expiredFiles,
+            privateFiles,
+            publicFiles,
+            passwordProtectedFiles,
+            totalDownloads,
+        };
+    }
+      
 }

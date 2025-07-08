@@ -64,6 +64,13 @@ export class FileController {
   }
 
   @UseGuards(AuthGuard('jwt'))
+  @Get('me/stats')
+  async getUserStats(@Request() req) {
+    return this.fileService.getUserStats(req.user.userId);
+  }
+
+
+  @UseGuards(AuthGuard('jwt'))
   @Get('secure-download/:id')
   async getFile(
     @Param('id') id: string, 
