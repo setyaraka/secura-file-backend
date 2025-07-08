@@ -26,6 +26,8 @@ export class FileService {
                     url: true,
                     createdAt: true,
                     expiresAt: true,
+                    downloadLimit: true,
+                    downloadCount: true,
                 },
                 orderBy: {
                     createdAt: 'desc',
@@ -246,6 +248,6 @@ export class FileService {
                 downloadLimit: downloadLimit ?? null,
             },
         });
-      }
+    }
       
 }
