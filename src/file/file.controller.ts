@@ -11,6 +11,7 @@ import { getContentType, getRequestInfo } from 'src/utils/request-info';
 import { UpdateFileMetadataDto } from './dto/upload-file.dto';
 import { PaginationDto } from 'src/common/dto/pagination.dto';
 import { UpdateVisibilityDto } from './dto/update-visibility.dto';
+import * as sharp from 'sharp';
 
 @Controller('file')
 export class FileController {
@@ -247,7 +248,10 @@ export class FileController {
       throw new NotFoundException('File not found on server');
     }
 
+    // Tentukan tipe file
     const contentType = getContentType(file.filename);
+    const isImage = /\.(png|jpe?g|jpg)$/i.test(file.filename);
+
     res.set({
       'Content-Type': contentType,
       'Content-Disposition': 'inline',
@@ -259,6 +263,56 @@ export class FileController {
 
     await this.fileService.logFileAccess(file.id, ipAddress, userAgent);
 
+    console.log(file.owner, "owener"); // pastikan ada datanya
+    // Watermark jika file gambar
+    if (isImage && file.owner?.email) {
+      const metadata = await sharp(filePath).metadata();
+      const imageWidth = metadata.width || 800;
+      const imageHeight = metadata.height || 600;
+
+      const watermarkText = `Confidential`;
+
+      // SVG pattern tile yang diulang
+      const svg = `
+        <svg width="${imageWidth}" height="${imageHeight}" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <pattern id="textPattern" patternUnits="userSpaceOnUse" width="800" height="200">
+              <text x="0" y="100"
+                transform="rotate(-30 0 100)"
+                fill="red"
+                opacity="0.1"
+                font-size="30"
+                font-family="Arial">
+                ${watermarkText}
+              </text>
+            </pattern>
+          </defs>
+          <rect width="100%" height="100%" fill="url(#textPattern)" />
+        </svg>
+      `;
+
+      const svgBuffer = Buffer.from(svg);
+
+      const watermarkedImage = await sharp(filePath)
+        .composite([{ input: svgBuffer, blend: 'over' }])
+        .png()
+        .toBuffer();
+
+      res.setHeader('Content-Type', 'image/png');
+      return res.end(watermarkedImage);
+
+      // return res.end(imageBuffer)
+    }
+
+    res.set({
+      'Content-Type': 'image/png', // override di sini!
+      'Content-Disposition': 'inline',
+      'Cache-Control': 'no-store',
+      'Pragma': 'no-cache',
+      'Expires': '0',
+      'X-Content-Type-Options': 'nosniff',
+    });
+    
     return res.sendFile(filePath);
   }
 
