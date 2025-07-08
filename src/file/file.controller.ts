@@ -228,12 +228,10 @@ export class FileController {
     const file = await this.fileService.getFileById(id);
     if (!file) throw new NotFoundException('File not found');
 
-    // Cek expired
     if (file.expiresAt && new Date() > file.expiresAt) {
       throw new ForbiddenException('File has expired');
     }
 
-    // Cek visibilitas
     if (file.visibility === 'private') {
       if (!req.user || file.ownerId !== req.user.userId) {
         throw new ForbiddenException('Access denied');
@@ -249,11 +247,16 @@ export class FileController {
       throw new NotFoundException('File not found on server');
     }
 
-    // Tambah Content-Type biar bisa di-preview
-    const contentType = getContentType(file.filename); // Buat helper dari ekstensi
-    res.setHeader('Content-Type', contentType);
+    const contentType = getContentType(file.filename);
+    res.set({
+      'Content-Type': contentType,
+      'Content-Disposition': 'inline',
+      'Cache-Control': 'no-store',
+      'Pragma': 'no-cache',
+      'Expires': '0',
+      'X-Content-Type-Options': 'nosniff',
+    });
 
-    // Log akses
     await this.fileService.logFileAccess(file.id, ipAddress, userAgent);
 
     return res.sendFile(filePath);
