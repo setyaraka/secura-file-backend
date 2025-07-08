@@ -64,7 +64,7 @@ export class FileController {
   }
 
   @UseGuards(AuthGuard('jwt'))
-  @Get('download/:id')
+  @Get('secure-download/:id')
   async getFile(
     @Param('id') id: string, 
     @Request() req,
@@ -121,6 +121,58 @@ export class FileController {
     }
 
     await this.fileService.logFileAccess(file.id, req.ip, req.headers['user-agent']);
+    await this.fileService.incrementDownloadCount(file.id);
+
+    return res.download(filePath, file.filename);
+  }
+
+  @Get('download/:id')
+  async publicDownloadFile(
+    @Param('id') id: string,
+    @Query('password') password: string,
+    @Res() res: Response,
+    @Query() query,
+    @Query('user-agent') ua: string,
+    @Query('ip') ip: string
+  ) {
+    const { ipAddress, userAgent } = getRequestInfo(res.req);
+
+    const file = await this.fileService.getFileById(id);
+
+    if (!file) {
+      await this.fileService.logFailedAccess(id, ipAddress, userAgent, 'File not found');
+      throw new NotFoundException('File not found');
+    }
+
+    if (file.visibility === 'private') {
+      await this.fileService.logFailedAccess(id, ipAddress, userAgent, 'Private file - access denied');
+      throw new ForbiddenException('This file is private.');
+    }
+
+    if (file.visibility === 'password_protected') {
+      if (!password || file.password !== password) {
+        await this.fileService.logFailedAccess(id, ipAddress, userAgent, 'Incorrect or missing password');
+        throw new ForbiddenException('Incorrect password.');
+      }
+    }
+
+    if (file.expiresAt && new Date() > file.expiresAt) {
+      await this.fileService.logFailedAccess(id, ipAddress, userAgent, 'File expired');
+      throw new ForbiddenException('File has expired.');
+    }
+
+    if (file.downloadLimit !== null && file.downloadCount >= file.downloadLimit) {
+      await this.fileService.logFailedAccess(id, ipAddress, userAgent, 'Download limit exceeded');
+      throw new ForbiddenException('Download limit exceeded.');
+    }
+
+    const filePath = join(__dirname, '..', '..', 'uploads', file.filename);
+    if (!fs.existsSync(filePath)) {
+      await this.fileService.logFailedAccess(id, ipAddress, userAgent, 'File not found on server');
+      throw new NotFoundException('File not found on server');
+    }
+
+    await this.fileService.logFileAccess(file.id, ipAddress, userAgent);
     await this.fileService.incrementDownloadCount(file.id);
 
     return res.download(filePath, file.filename);

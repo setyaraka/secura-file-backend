@@ -45,7 +45,10 @@ export class FileService {
             page,
             limit,
             totalPages: Math.ceil(total / limit),
-            data: logs,
+            data: logs.map((file) => ({
+                ...file,
+                shareLink: `${process.env.LOCAL_URL}/file/download/${file.id}`,
+            })),
         };
     }
 
@@ -238,8 +241,8 @@ export class FileService {
         }
         expirationDate = parsedDate;
         }
-      
-        return this.prisma.file.update({
+
+        const updatedFile = await this.prisma.file.update({
             where: { id: fileId },
             data: {
                 visibility,
@@ -248,6 +251,12 @@ export class FileService {
                 downloadLimit: downloadLimit ?? null,
             },
         });
+          
+        return {
+            message: 'File metadata updated successfully',
+            file: updatedFile,
+            shareLink: `${process.env.LOCAL_URL}/file/download/${updatedFile.id}`,
+        };
     }
       
 }
