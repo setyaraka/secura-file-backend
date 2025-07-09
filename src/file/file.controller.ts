@@ -263,7 +263,6 @@ export class FileController {
 
     await this.fileService.logFileAccess(file.id, ipAddress, userAgent);
 
-    console.log(file.owner, "owener"); // pastikan ada datanya
     // Watermark jika file gambar
     if (isImage && file.owner?.email) {
       const metadata = await sharp(filePath).metadata();
