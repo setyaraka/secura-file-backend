@@ -30,11 +30,13 @@ export class FileController {
   }))
   async uploadFile(@UploadedFile() file: Express.Multer.File, @Request() req) {
     const savedFile = await this.fileService.createEmptyFileRecord(file, req.user.userId);
+    const previewUrl = `${process.env.BASE_URL}/file/preview/${savedFile.id}`;
 
     return {
       message: 'File uploaded successfully',
       fileId: savedFile.id,
       filename: savedFile.filename,
+      previewUrl
     };
   }
 
@@ -58,7 +60,7 @@ export class FileController {
 
   @UseGuards(AuthGuard('jwt'))
   @Get('my-files')
-  async getMyFiles(@Request() req, @Query() paginationDto: PaginationDto,) {
+  async getMyFiles(@Request() req, @Query() paginationDto: PaginationDto) {
     const userId = req.user.userId;
     
     return this.fileService.getFilesByUser(userId, paginationDto.page, paginationDto.limit);
@@ -217,6 +219,21 @@ export class FileController {
     return this.fileService.getFailedAccessLogsByFileId(id, paginationDto.page, paginationDto.limit);
   }
 
+  @Get('preview/public/:id')
+  async publicPreview(@Param('id') id: string, @Res() res: Response) {
+    const file = await this.fileService.getFileById(id);
+    if (!file) throw new NotFoundException();
+
+    const filePath = join(__dirname, '..', '..', 'uploads', file.filename);
+    if (!fs.existsSync(filePath)) throw new NotFoundException();
+
+    const contentType = getContentType(file.filename);
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Content-Disposition', 'inline');
+    return res.sendFile(filePath);
+  }
+
+  @UseGuards(AuthGuard('jwt'))
   @Get('preview/:id')
   async previewFile(
     @Param('id') id: string,
@@ -248,30 +265,16 @@ export class FileController {
       throw new NotFoundException('File not found on server');
     }
 
-    // Tentukan tipe file
     const contentType = getContentType(file.filename);
-    const isImage = /\.(png|jpe?g|jpg)$/i.test(file.filename);
-
-    res.set({
-      'Content-Type': contentType,
-      'Content-Disposition': 'inline',
-      'Cache-Control': 'no-store',
-      'Pragma': 'no-cache',
-      'Expires': '0',
-      'X-Content-Type-Options': 'nosniff',
-    });
+    const isImage = /^image\/(png|jpeg|jpg)$/i.test(contentType);
 
     await this.fileService.logFileAccess(file.id, ipAddress, userAgent);
 
-    // Watermark jika file gambar
     if (isImage && file.owner?.email) {
       const metadata = await sharp(filePath).metadata();
       const imageWidth = metadata.width || 800;
       const imageHeight = metadata.height || 600;
 
-      const watermarkText = `Confidential`;
-
-      // SVG pattern tile yang diulang
       const svg = `
         <svg width="${imageWidth}" height="${imageHeight}" xmlns="http://www.w3.org/2000/svg">
           <defs>
@@ -282,7 +285,7 @@ export class FileController {
                 opacity="0.1"
                 font-size="30"
                 font-family="Arial">
-                ${watermarkText}
+                Confidential
               </text>
             </pattern>
           </defs>
@@ -294,25 +297,28 @@ export class FileController {
 
       const watermarkedImage = await sharp(filePath)
         .composite([{ input: svgBuffer, blend: 'over' }])
-        .png()
+        .toFormat('png')
         .toBuffer();
 
       res.setHeader('Content-Type', 'image/png');
+      res.setHeader('Content-Disposition', 'inline');
       return res.end(watermarkedImage);
-
-      // return res.end(imageBuffer)
     }
 
-    res.set({
-      'Content-Type': 'image/png', // override di sini!
-      'Content-Disposition': 'inline',
-      'Cache-Control': 'no-store',
-      'Pragma': 'no-cache',
-      'Expires': '0',
-      'X-Content-Type-Options': 'nosniff',
-    });
-    
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Content-Disposition', 'inline');
+    res.setHeader('Cache-Control', 'no-store');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+
     return res.sendFile(filePath);
+  }
+
+  @UseGuards(AuthGuard('jwt'))
+  @Delete('cleanup-no-expiry')
+  async cleanupFilesWithoutExpiry() {
+    return this.fileService.deleteFilesWithNoExpiration();
   }
 
   @UseGuards(AuthGuard('jwt'))

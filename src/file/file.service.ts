@@ -29,6 +29,7 @@ export class FileService {
                     expiresAt: true,
                     downloadLimit: true,
                     downloadCount: true,
+                    visibility: true
                 },
                 orderBy: {
                     createdAt: 'desc',
@@ -247,7 +248,6 @@ export class FileService {
             where: { id: fileId },
             data: {
                 visibility,
-                password: password || null,
                 expiresAt: expirationDate,
                 downloadLimit: downloadLimit ?? null,
             },
@@ -290,5 +290,27 @@ export class FileService {
             totalDownloads,
         };
     }
+
+    async deleteFilesWithNoExpiration() {
+        const filesToDelete = await this.prisma.file.findMany({
+          where: {
+            expiresAt: null,
+          },
+        });
+      
+        for (const file of filesToDelete) {
+          const filePath = join(__dirname, '..', '..', 'uploads', file.filename);
+          if (fs.existsSync(filePath)) {
+            fs.unlinkSync(filePath);
+          }
+      
+          await this.prisma.file.delete({
+            where: { id: file.id },
+          });
+        }
+      
+        return { message: `${filesToDelete.length} file(s) deleted.` };
+    }
+      
       
 }
