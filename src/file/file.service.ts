@@ -312,5 +312,28 @@ export class FileService {
         return { message: `${filesToDelete.length} file(s) deleted.` };
     }
       
+    async getMetadataById(id: string) {
+        const file = await this.prisma.file.findUnique({
+          where: { id },
+          select: {
+            visibility: true,
+            filename: true,
+            expiresAt: true,
+            password: true,
+          }
+        });
       
+        if (!file) {
+          throw new NotFoundException('File not found');
+        }
+      
+        const isExpired = file.expiresAt ? new Date() > file.expiresAt : false;
+      
+        return {
+          visibility: file.visibility,
+          fileName: file.filename,
+          isExpired,
+          hasPassword: !!file.password
+        };
+    }
 }

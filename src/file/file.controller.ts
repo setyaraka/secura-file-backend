@@ -58,6 +58,11 @@ export class FileController {
     return this.fileService.updateFileMetadata(metadataDto, req.user.userId);
   }
 
+  @Get('metadata/:id')
+  async getMetadataById(@Param('id') id: string) {
+    return this.fileService.getMetadataById(id);
+  }
+
   @UseGuards(AuthGuard('jwt'))
   @Get('my-files')
   async getMyFiles(@Request() req, @Query() paginationDto: PaginationDto) {
@@ -282,7 +287,7 @@ export class FileController {
               <text x="0" y="100"
                 transform="rotate(-30 0 100)"
                 fill="red"
-                opacity="0.1"
+                opacity="0.5"
                 font-size="30"
                 font-family="Arial">
                 Confidential
