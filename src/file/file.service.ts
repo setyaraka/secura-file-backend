@@ -4,6 +4,10 @@ import * as fs from 'fs';
 import { join } from 'path';
 import { UpdateFileMetadataDto } from './dto/upload-file.dto';
 import { UpdateVisibilityDto } from './dto/update-visibility.dto';
+import { CreateFileShareDto } from './dto/create-file-share.dto';
+import { randomBytes } from 'crypto';
+import * as bcrypt from 'bcrypt';
+import { Request } from 'express';
 
 @Injectable()
 export class FileService {
@@ -222,7 +226,9 @@ export class FileService {
             data: {
                 filename: file.filename,
                 url: `uploads/${file.filename}`,
+                originalName: file.originalname,
                 ownerId: userId,
+                size: file.size
             },
         });
     }
@@ -335,5 +341,146 @@ export class FileService {
           isExpired,
           hasPassword: !!file.password
         };
+    }
+
+    async createShare(dto: CreateFileShareDto) {
+        const file = await this.prisma.file.findUnique({
+            where: { id: dto.fileId },
+          });
+          
+        if (!file) {
+            throw new NotFoundException('File not found');
+        }
+        const token = randomBytes(24).toString('hex');
+
+        const share = await this.prisma.fileShare.create({
+            data: {
+                fileId: dto.fileId,
+                email: dto.email,
+                token,
+                expiresAt: new Date(dto.expiresAt),
+                maxDownload: dto.maxDownload,
+                note: dto.note,
+            },
+        });
+        const shareUrl = `${process.env.FRONTEND_URL}/share/${token}`;
+        return {
+            message: 'File shared successfully',
+            shareUrl,
+        };
+    }
+
+    async getByToken(token: string) {
+        return this.prisma.fileShare.findUnique({
+            where: { token },
+            include: { file: true }
+        });
+    }
+
+    async getShareInfo(token: string) {
+        const share = await this.prisma.fileShare.findUnique({
+            where: { token },
+            include: {
+                file: true,
+            },
+        });
+    
+        if (!share) {
+            throw new NotFoundException('Link tidak ditemukan atau sudah kadaluarsa');
+        }
+    
+        const now = new Date();
+        const isExpired = share.expiresAt < now;
+        const isLimitExceeded = share.downloadCount >= share.maxDownload;
+    
+        if (isExpired || isLimitExceeded) {
+            throw new ForbiddenException('Link sudah tidak berlaku');
+        }
+    
+        return {
+            fileName: share.file.filename,
+            fileSize: share.file.size,
+            note: share.note,
+            expiresAt: share.expiresAt,
+            maxDownload: share.maxDownload,
+            downloadCount: share.downloadCount,
+        };
+    }
+
+    async validateAndPrepareDownload(token: string) {
+        const share = await this.prisma.fileShare.findUnique({
+          where: { token },
+          include: { file: true },
+        });
+      
+        if (!share) {
+          throw new NotFoundException('Link tidak ditemukan');
+        }
+      
+        const now = new Date();
+        const isExpired = share.expiresAt < now;
+        const isLimitExceeded = share.downloadCount >= share.maxDownload;
+      
+        if (isExpired || isLimitExceeded) {
+          throw new ForbiddenException('Link sudah tidak berlaku');
+        }
+      
+        await this.prisma.fileShare.update({
+          where: { token },
+          data: {
+            downloadCount: { increment: 1 },
+          },
+        });
+      
+        return { file: share.file };
+    }
+
+    async downloadSharedFile(token: string, password?: string) {
+        const share = await this.prisma.fileShare.findUnique({
+          where: { token },
+          include: { file: true },
+        });
+      
+        if (!share) throw new NotFoundException('Link tidak ditemukan');
+      
+        const now = new Date();
+        if (share.expiresAt < now) throw new ForbiddenException('Link sudah expired');
+        if (share.downloadCount >= share.maxDownload) throw new ForbiddenException('Download limit tercapai');
+      
+        const file = share.file;
+      
+        if (file.password) {
+          if (!password) throw new ForbiddenException('Password dibutuhkan');
+          const isMatch = await bcrypt.compare(password, file.password);
+          if (!isMatch) throw new ForbiddenException('Password salah');
+        }
+      
+        await this.prisma.fileShare.update({
+          where: { id: share.id },
+          data: { downloadCount: { increment: 1 } },
+        });
+      
+        return file;
+    }
+      
+    async logFileShareDownload(fileId: string, token: string, req: Request) {
+        const ip = req.ip || req.headers['x-forwarded-for'] as string;
+        const userAgent = req.headers['user-agent'];
+      
+        await this.prisma.fileShareDownloadLog.create({
+          data: {
+            fileId,
+            token,
+            ip,
+            userAgent,
+          },
+        });
+    }
+    
+    async getFileShareLogs(fileId: string) {
+        return this.prisma.fileShareDownloadLog.findMany({
+          where: { fileId },
+          orderBy: { createdAt: 'desc' },
+        });
     }
 }

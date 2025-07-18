@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, Delete, ForbiddenException, Get, NotFoundException, Param, Patch, Post, Query, Request, Res, UploadedFile, UseGuards, UseInterceptors, UsePipes, ValidationPipe } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Delete, ForbiddenException, Get, NotFoundException, Param, Patch, Post, Query, Req, Request, Res, UploadedFile, UseGuards, UseInterceptors, UsePipes, ValidationPipe } from '@nestjs/common';
 import { FileService } from './file.service';
 import { AuthGuard } from '@nestjs/passport';
 import { FileInterceptor } from '@nestjs/platform-express';
@@ -12,6 +12,9 @@ import { UpdateFileMetadataDto } from './dto/upload-file.dto';
 import { PaginationDto } from 'src/common/dto/pagination.dto';
 import { UpdateVisibilityDto } from './dto/update-visibility.dto';
 import * as sharp from 'sharp';
+import { CreateFileShareDto } from './dto/create-file-share.dto';
+import { ShareDownloadDto } from './dto/share-download.dto';
+import { Request as ExpressRequest } from 'express';
 
 @Controller('file')
 export class FileController {
@@ -35,7 +38,8 @@ export class FileController {
     return {
       message: 'File uploaded successfully',
       fileId: savedFile.id,
-      filename: savedFile.filename,
+      filename: file.originalname,
+      size: file.size,
       previewUrl
     };
   }
@@ -324,6 +328,56 @@ export class FileController {
   @Delete('cleanup-no-expiry')
   async cleanupFilesWithoutExpiry() {
     return this.fileService.deleteFilesWithNoExpiration();
+  }
+
+  @Post('share')
+  create(@Body() dto: CreateFileShareDto) {
+    return this.fileService.createShare(dto);
+  }
+
+  @Get('share/:token')
+  getByToken(@Param('token') token: string) {
+    return this.fileService.getShareInfo(token);
+  }
+
+  @Get('share/download')
+  async validateAndPrepareSharedFile(@Res() res: Response, @Query('token') token: string) {
+    const { file } = await this.fileService.validateAndPrepareDownload(token);
+
+    const filePath = join(__dirname, '..', '..', 'uploads', file.url); // sesuaikan path folder-mu
+
+    if (!fs.existsSync(filePath)) {
+      throw new NotFoundException('File tidak ditemukan');
+    }
+
+    res.set({
+      'Content-Disposition': `attachment; filename="${file.filename}"`,
+      'Content-Type': 'application/octet-stream',
+    });
+
+    const fileStream = fs.createReadStream(filePath);
+    fileStream.pipe(res);
+  }
+
+  @Post('share/:token/download')
+  async downloadSharedFile(
+    @Param('token') token: string,
+    @Body() body: ShareDownloadDto,
+    @Res() res: Response,
+    @Req() req: ExpressRequest,
+  ) {
+    const file = await this.fileService.downloadSharedFile(token, body.password);
+
+    await this.fileService.logFileShareDownload(file.id, token, req);
+
+    const filePath = join(__dirname, '..', '..', 'uploads', file.url); // atau sesuai path-mu
+
+    return res.download(filePath, file.filename);
+  }
+
+  @Get('share/:fileId/logs')
+  async getFileShareLogs(@Param('fileId') fileId: string) {
+    return this.fileService.getFileShareLogs(fileId);
   }
 
   @UseGuards(AuthGuard('jwt'))
