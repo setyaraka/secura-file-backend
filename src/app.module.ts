@@ -6,14 +6,16 @@ import { AuthModule } from './auth/auth.module';
 import { ConfigModule } from '@nestjs/config';
 import { FileModule } from './file/file.module';
 import { SchedulerModule } from './scheduler/scheduler.module';
+import { EmailService } from './email/email.service';
+import { EmailModule } from './email/email.module';
 
 @Module({
   imports: [UserModule, AuthModule, 
     ConfigModule.forRoot({
       isGlobal: true
-    }), FileModule, SchedulerModule,
+    }), FileModule, SchedulerModule, EmailModule,
   ],
   controllers: [AppController],
-  providers: [AppService],
+  providers: [AppService, EmailService],
 })
 export class AppModule {}

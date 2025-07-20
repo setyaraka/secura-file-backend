@@ -1,6 +1,7 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from 'src/prisma/prisma.service';
 import * as fs from 'fs';
+import { promises as fsAsync } from 'fs';
 import { join } from 'path';
 import { UpdateFileMetadataDto } from './dto/upload-file.dto';
 import { UpdateVisibilityDto } from './dto/update-visibility.dto';
@@ -8,10 +9,15 @@ import { CreateFileShareDto } from './dto/create-file-share.dto';
 import { randomBytes } from 'crypto';
 import * as bcrypt from 'bcrypt';
 import { Request } from 'express';
+import { EmailService } from 'src/email/email.service';
+import { degrees, PDFDocument, rgb } from 'pdf-lib';
 
 @Injectable()
 export class FileService {
-    constructor (private prisma: PrismaService) {}
+    constructor (
+        private prisma: PrismaService,
+        private emailService: EmailService
+    ) {}
 
     async getFileById(id: string) {
         return this.prisma.file.findUnique({
@@ -249,13 +255,14 @@ export class FileService {
         }
         expirationDate = parsedDate;
         }
-
+        const hashedPassword = await bcrypt.hash(password || "", 10);
         const updatedFile = await this.prisma.file.update({
             where: { id: fileId },
             data: {
                 visibility,
                 expiresAt: expirationDate,
                 downloadLimit: downloadLimit ?? null,
+                password: visibility === 'password_protected' ? hashedPassword : null
             },
         });
           
@@ -345,29 +352,49 @@ export class FileService {
 
     async createShare(dto: CreateFileShareDto) {
         const file = await this.prisma.file.findUnique({
-            where: { id: dto.fileId },
-          });
-          
+          where: { id: dto.fileId },
+        });
+      
         if (!file) {
-            throw new NotFoundException('File not found');
+          throw new NotFoundException('File not found');
         }
+      
         const token = randomBytes(24).toString('hex');
-
-        const share = await this.prisma.fileShare.create({
-            data: {
+        const shareUrl = `${process.env.FRONTEND_URL}/share/${token}`;
+      
+        try {
+          const result = await this.prisma.$transaction(async (tx) => {
+            const createdShare = await tx.fileShare.create({
+              data: {
                 fileId: dto.fileId,
                 email: dto.email,
                 token,
                 expiresAt: new Date(dto.expiresAt),
                 maxDownload: dto.maxDownload,
                 note: dto.note,
-            },
-        });
-        const shareUrl = `${process.env.FRONTEND_URL}/share/${token}`;
-        return {
+              },
+            });
+      
+            try {
+              await this.emailService.sendFileShareEmail({
+                to: dto.email,
+                filename: file.originalName ?? 'Confidential Document',
+                shareUrl,
+              });
+            } catch (emailErr) {
+              throw new Error(`Failed to send email: ${emailErr.message}`);
+            }
+      
+            return createdShare;
+          });
+      
+          return {
             message: 'File shared successfully',
             shareUrl,
-        };
+          };
+        } catch (err) {
+          throw new BadRequestException("Failed to share file");
+        }
     }
 
     async getByToken(token: string) {
@@ -388,6 +415,7 @@ export class FileService {
         if (!share) {
             throw new NotFoundException('Link tidak ditemukan atau sudah kadaluarsa');
         }
+        console.log(share, ">>> SHARE")
     
         const now = new Date();
         const isExpired = share.expiresAt < now;
@@ -396,7 +424,7 @@ export class FileService {
         if (isExpired || isLimitExceeded) {
             throw new ForbiddenException('Link sudah tidak berlaku');
         }
-    
+
         return {
             fileName: share.file.filename,
             fileSize: share.file.size,
@@ -404,6 +432,7 @@ export class FileService {
             expiresAt: share.expiresAt,
             maxDownload: share.maxDownload,
             downloadCount: share.downloadCount,
+            visibility: share?.file?.visibility === "password_protected" ? true : false
         };
     }
 
@@ -448,10 +477,13 @@ export class FileService {
         if (share.downloadCount >= share.maxDownload) throw new ForbiddenException('Download limit tercapai');
       
         const file = share.file;
+        console.log(file.password, '>>> FILE NYA')
+        console.log(password, '>>> PASSWORD')
       
         if (file.password) {
           if (!password) throw new ForbiddenException('Password dibutuhkan');
           const isMatch = await bcrypt.compare(password, file.password);
+          console.log(isMatch, ">>>> MAUS")
           if (!isMatch) throw new ForbiddenException('Password salah');
         }
       
@@ -482,5 +514,26 @@ export class FileService {
           where: { fileId },
           orderBy: { createdAt: 'desc' },
         });
+    }
+
+    async generatePdfWithWatermark(inputPath: string, watermarkText: string) {
+        const existingPdfBytes = await fsAsync.readFile(inputPath);
+        const pdfDoc = await PDFDocument.load(existingPdfBytes);
+        const pages = pdfDoc.getPages();
+      
+        for (const page of pages) {
+          const { width, height } = page.getSize();
+          page.drawText(watermarkText, {
+            x: 50,
+            y: height / 2,
+            size: 50,
+            opacity: 0.2,
+            rotate: degrees(-30),
+            color: rgb(1, 0, 0),
+          });
+        }
+      
+        const pdfBytes = await pdfDoc.save();
+        return Buffer.from(pdfBytes);
     }
 }
