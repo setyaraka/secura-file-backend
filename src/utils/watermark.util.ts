@@ -1,8 +1,6 @@
 import { degrees, PDFDocument, rgb, StandardFonts } from 'pdf-lib';
 import * as sharp from 'sharp';
 
-// import { PDFDocument, rgb, StandardFonts, degrees } from 'pdf-lib';
-
 export async function addPdfWatermark(buffer: Buffer, email: string, timestamp: string): Promise<Buffer> {
   const pdfDoc = await PDFDocument.load(buffer);
   const font = await pdfDoc.embedFont(StandardFonts.Helvetica);

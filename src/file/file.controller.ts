@@ -403,7 +403,6 @@ export class FileController {
     await this.fileService.logFileShareDownload(file.id, token, req);
 
     const filePath = join(__dirname, '..', '..', file.url); // atau sesuai path-mu
-    console.log(filePath, '>>> psth s')
     if(!fs.existsSync(filePath)){
       throw new NotFoundException('File Not Found in Server');
     }
