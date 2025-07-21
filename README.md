@@ -11,7 +11,7 @@ It supports advanced features like file access control, watermarking, and audit 
 - 🔑 Password protection
 - ⏰ Expiry date
 - 🔢 Access limit
-- 🖋️ Watermarking (image preview)
+- 🖋️ Watermarking (image and pdf preview)
 - 📊 Dashboard statistics
 - 🕵️ Audit log
 
