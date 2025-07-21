@@ -15,6 +15,8 @@ import * as sharp from 'sharp';
 import { CreateFileShareDto } from './dto/create-file-share.dto';
 import { ShareDownloadDto } from './dto/share-download.dto';
 import { Request as ExpressRequest } from 'express';
+import { addImageWatermark, addPdfWatermark } from 'src/utils/watermark.util';
+import * as bcrypt from 'bcrypt';
 
 @Controller('file')
 export class FileController {
@@ -242,86 +244,116 @@ export class FileController {
     return res.sendFile(filePath);
   }
 
-  @UseGuards(AuthGuard('jwt'))
-  @Get('preview/:id')
-  async previewFile(
-    @Param('id') id: string,
-    @Res() res: Response,
-    @Request() req,
-    @Query('password') password?: string,
-  ) {
-    const { ipAddress, userAgent } = getRequestInfo(req);
+  // @UseGuards(AuthGuard('jwt'))
+  // @Get('preview/:id')
+  // async previewFile(
+  //   @Param('id') id: string,
+  //   @Res() res: Response,
+  //   @Request() req,
+  //   @Query('password') password?: string,
+  // ) {
+  //   const { ipAddress, userAgent } = getRequestInfo(req);
 
-    const file = await this.fileService.getFileById(id);
-    if (!file) throw new NotFoundException('File not found');
+  //   const file = await this.fileService.getFileById(id);
+  //   const isMatch = await bcrypt.compare(password || '', file?.password || '');
+  //   if (!file) throw new NotFoundException('File not found');
 
-    if (file.expiresAt && new Date() > file.expiresAt) {
-      throw new ForbiddenException('File has expired');
-    }
+  //   if (file.expiresAt && new Date() > file.expiresAt) {
+  //     throw new ForbiddenException('File has expired');
+  //   }
 
-    if (file.visibility === 'private') {
-      if (!req.user || file.ownerId !== req.user.userId) {
-        throw new ForbiddenException('Access denied');
-      }
-    } else if (file.visibility === 'password_protected') {
-      if (!password || password !== file.password) {
-        throw new ForbiddenException('Incorrect password');
-      }
-    }
+  //   if (file.visibility === 'private') {
+  //     if (!req.user || file.ownerId !== req.user.userId) {
+  //       throw new ForbiddenException('Access denied');
+  //     }
+  //   } else if (file.visibility === 'password_protected') {
+  //     if (!password || password !== file.password) {
+  //       throw new ForbiddenException('Incorrect password');
+  //     }
+  //   }
 
-    const filePath = join(__dirname, '..', '..', 'uploads', file.filename);
-    if (!fs.existsSync(filePath)) {
-      throw new NotFoundException('File not found on server');
-    }
+  //   const filePath = join(__dirname, '..', '..', 'uploads', file.filename);
+  //   if (!fs.existsSync(filePath)) {
+  //     throw new NotFoundException('File not found on server');
+  //   }
 
-    const contentType = getContentType(file.filename);
-    const isImage = /^image\/(png|jpeg|jpg)$/i.test(contentType);
+  //   const contentType = getContentType(file.filename);
+  //   const isImage = /^image\/(png|jpeg|jpg)$/i.test(contentType);
+  //   const isPdf = contentType === 'application/pdf';
 
-    await this.fileService.logFileAccess(file.id, ipAddress, userAgent);
+  //   await this.fileService.logFileAccess(file.id, ipAddress, userAgent);
 
-    if (isImage && file.owner?.email) {
-      const metadata = await sharp(filePath).metadata();
-      const imageWidth = metadata.width || 800;
-      const imageHeight = metadata.height || 600;
+  //   if (isImage && file.owner?.email) {
+  //     const buffer = fs.readFileSync(filePath);
+  //     const watermarkedImage = await addImageWatermark(buffer, 'Confidential');
+    
+  //     res.setHeader('Content-Type', 'image/png');
+  //     res.setHeader('Content-Disposition', 'inline');
+  //     return res.end(watermarkedImage);
+  //   }
 
-      const svg = `
-        <svg width="${imageWidth}" height="${imageHeight}" xmlns="http://www.w3.org/2000/svg">
-          <defs>
-            <pattern id="textPattern" patternUnits="userSpaceOnUse" width="800" height="200">
-              <text x="0" y="100"
-                transform="rotate(-30 0 100)"
-                fill="red"
-                opacity="0.5"
-                font-size="30"
-                font-family="Arial">
-                Confidential
-              </text>
-            </pattern>
-          </defs>
-          <rect width="100%" height="100%" fill="url(#textPattern)" />
-        </svg>
+  //   if (isPdf && file.owner?.email) {
+  //     const buffer = fs.readFileSync(filePath);
+  //     const watermarkedPdf = await addPdfWatermark(buffer, 'Confidential');
+
+  //     res.setHeader('Content-Type', 'application/pdf');
+  //     res.setHeader('Content-Disposition', 'inline; filename="preview.pdf"');
+  //     res.setHeader('Cache-Control', 'no-store');
+  //     res.setHeader('Pragma', 'no-cache');
+  //     res.setHeader('Expires', '0');
+  //     res.setHeader('X-Content-Type-Options', 'nosniff');
+  //     return res.end(watermarkedPdf);
+  //   }
+
+  //   res.setHeader('Content-Type', contentType);
+  //   res.setHeader('Content-Disposition', 'inline');
+  //   res.setHeader('Cache-Control', 'no-store');
+  //   res.setHeader('Pragma', 'no-cache');
+  //   res.setHeader('Expires', '0');
+  //   res.setHeader('X-Content-Type-Options', 'nosniff');
+
+  //   return res.sendFile(filePath);
+  // }
+
+  @Get('preview/token/:token')
+  async previewSharedFile(@Param('token') token: string, @Res() res: Response) {
+    const { buffer, mimeType, isImage } = await this.fileService.generateWatermarkedPreview(token);
+
+    if (isImage) {
+      const base64 = buffer.toString('base64');
+      const html = `
+        <html>
+          <head>
+            <style>
+              body, html {
+                margin: 0;
+                padding: 0;
+                height: 100%;
+                background: #000;
+                display: flex;
+                justify-content: center;
+                align-items: center;
+              }
+              img {
+                max-width: 100%;
+                max-height: 100%;
+                object-fit: contain;
+              }
+            </style>
+          </head>
+          <body>
+            <img src="data:${mimeType};base64,${base64}" />
+          </body>
+        </html>
       `;
-
-      const svgBuffer = Buffer.from(svg);
-
-      const watermarkedImage = await sharp(filePath)
-        .composite([{ input: svgBuffer, blend: 'over' }])
-        .toFormat('png')
-        .toBuffer();
-
-      res.setHeader('Content-Type', 'image/png');
-      res.setHeader('Content-Disposition', 'inline');
-      return res.end(watermarkedImage);
+  
+      res.setHeader('Content-Type', 'text/html');
+      return res.send(html);
     }
 
-    res.setHeader('Content-Type', contentType);
+    res.setHeader('Content-Type', mimeType);
     res.setHeader('Content-Disposition', 'inline');
-    res.setHeader('Cache-Control', 'no-store');
-    res.setHeader('Pragma', 'no-cache');
-    res.setHeader('Expires', '0');
-    res.setHeader('X-Content-Type-Options', 'nosniff');
-
-    return res.sendFile(filePath);
+    return res.end(buffer);
   }
 
   @UseGuards(AuthGuard('jwt'))

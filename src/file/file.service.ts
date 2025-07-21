@@ -2,7 +2,7 @@ import { BadRequestException, ForbiddenException, Injectable, NotFoundException 
 import { PrismaService } from 'src/prisma/prisma.service';
 import * as fs from 'fs';
 import { promises as fsAsync } from 'fs';
-import { join } from 'path';
+import { extname, join } from 'path';
 import { UpdateFileMetadataDto } from './dto/upload-file.dto';
 import { UpdateVisibilityDto } from './dto/update-visibility.dto';
 import { CreateFileShareDto } from './dto/create-file-share.dto';
@@ -11,6 +11,8 @@ import * as bcrypt from 'bcrypt';
 import { Request } from 'express';
 import { EmailService } from 'src/email/email.service';
 import { degrees, PDFDocument, rgb } from 'pdf-lib';
+import { addImageWatermark, addPdfWatermark } from 'src/utils/watermark.util';
+import * as dayjs from 'dayjs'
 
 @Injectable()
 export class FileService {
@@ -360,7 +362,7 @@ export class FileService {
         }
       
         const token = randomBytes(24).toString('hex');
-        const shareUrl = `${process.env.FRONTEND_URL}/share/${token}`;
+        const shareUrl = `${process.env.FRONTEND_URL}/preview/token/${token}`;
       
         try {
           const result = await this.prisma.$transaction(async (tx) => {
@@ -415,7 +417,6 @@ export class FileService {
         if (!share) {
             throw new NotFoundException('Link tidak ditemukan atau sudah kadaluarsa');
         }
-        console.log(share, ">>> SHARE")
     
         const now = new Date();
         const isExpired = share.expiresAt < now;
@@ -477,13 +478,10 @@ export class FileService {
         if (share.downloadCount >= share.maxDownload) throw new ForbiddenException('Download limit tercapai');
       
         const file = share.file;
-        console.log(file.password, '>>> FILE NYA')
-        console.log(password, '>>> PASSWORD')
       
         if (file.password) {
           if (!password) throw new ForbiddenException('Password dibutuhkan');
           const isMatch = await bcrypt.compare(password, file.password);
-          console.log(isMatch, ">>>> MAUS")
           if (!isMatch) throw new ForbiddenException('Password salah');
         }
       
@@ -522,9 +520,9 @@ export class FileService {
         const pages = pdfDoc.getPages();
       
         for (const page of pages) {
-          const { width, height } = page.getSize();
+          const { width = 50, height } = page.getSize();
           page.drawText(watermarkText, {
-            x: 50,
+            x: width,
             y: height / 2,
             size: 50,
             opacity: 0.2,
@@ -535,5 +533,43 @@ export class FileService {
       
         const pdfBytes = await pdfDoc.save();
         return Buffer.from(pdfBytes);
+    }
+
+    async generateWatermarkedPreview(token: string): Promise<{ buffer: Buffer; mimeType: string, isImage: boolean }> {
+        const fileShare = await this.prisma.fileShare.findUnique({ where: { token } });
+        if (!fileShare) throw new NotFoundException('Invalid or expired token');
+      
+        if (fileShare.downloadCount >= fileShare.maxDownload) {
+          throw new ForbiddenException('Download limit reached');
+        }
+      
+        const file = await this.prisma.file.findUnique({ where: { id: fileShare.fileId } });
+        if (!file) throw new NotFoundException('File not found');
+      
+        const filePath = join(__dirname, '..', '..', 'uploads', file.filename);
+        const buffer = fs.readFileSync(filePath);
+        const timestamp = dayjs().format('DD MMM YYYY, HH:mm:ss');
+      
+        const ext = extname(file.filename).toLowerCase();
+        let watermarked: Buffer;
+        let mimeType = 'application/octet-stream';
+        let isImage = false;
+      
+        if (ext === '.pdf') {
+          watermarked = await addPdfWatermark(buffer, fileShare.email, timestamp);
+          mimeType = 'application/pdf';
+        } else {
+          watermarked = await addImageWatermark(buffer, fileShare.email, timestamp);
+          mimeType = 'image/png';
+          isImage = true;
+        }
+      
+        // Update download count
+        await this.prisma.fileShare.update({
+          where: { token },
+          data: { downloadCount: { increment: 1 } },
+        });
+      
+        return { buffer: watermarked, mimeType, isImage };
     }
 }

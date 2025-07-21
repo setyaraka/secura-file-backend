@@ -8,6 +8,7 @@ import { FileModule } from './file/file.module';
 import { SchedulerModule } from './scheduler/scheduler.module';
 import { EmailService } from './email/email.service';
 import { EmailModule } from './email/email.module';
+import { PreviewService } from './preview/preview.service';
 
 @Module({
   imports: [UserModule, AuthModule, 
@@ -16,6 +17,6 @@ import { EmailModule } from './email/email.module';
     }), FileModule, SchedulerModule, EmailModule,
   ],
   controllers: [AppController],
-  providers: [AppService, EmailService],
+  providers: [AppService, EmailService, PreviewService],
 })
 export class AppModule {}

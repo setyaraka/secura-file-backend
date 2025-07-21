@@ -10,11 +10,6 @@ export class EmailService {
     async sendFileShareEmail({ to, shareUrl, filename}) {
         try {
             const subject = `You've received a file via Secura File`;
-            // const html = `
-            //     <p>Someone shared a file with you: <strong>${filename}</strong></p>
-            //     <p>You can download it here: <a href="${shareUrl}">${shareUrl}</a></p>
-            //     <p>This link may expire or be limited in download count.</p>
-            // `;
             const html = `<div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto; padding: 20px; background-color: #f9f9f9; color: #333; border: 1px solid #ddd; border-radius: 8px;">
                                 <h2 style="color: #2f855a;">📁 You've received a file via Secura File</h2>
                                 
@@ -59,7 +54,6 @@ export class EmailService {
               }
             return result;
         } catch (err) {
-            this.logger.error(err, '>>>> ERR')
             this.logger.error(`Failed to send email: ${err.message}`, err.stack);
             throw err;
         }
