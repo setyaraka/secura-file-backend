@@ -315,8 +315,27 @@ export class FileController {
   //   return res.sendFile(filePath);
   // }
 
-  @Get('preview/token/:token')
-  async previewSharedFile(@Param('token') token: string, @Res() res: Response) {
+  @Get('preview/token/:token/meta')
+  async getPreviewMeta(@Param('token') token: string) {
+    const meta = await this.fileService.getFilePreviewMeta(token);
+    return meta;
+  }
+
+  @Post('preview/token/:token/file')
+  async previewSharedFile(
+    @Param('token') token: string, 
+    @Body('password') password: string,
+    @Res() res: Response
+  ) {
+    const metadata = await this.fileService.getByToken(token);
+    
+    if (metadata?.file.visibility === 'password_protected') {
+      const isValid = await bcrypt.compare(password || '', metadata?.file.password || '');
+      if (!isValid) {
+        throw new ForbiddenException('Invalid password');
+      }
+    }
+
     const { buffer, mimeType, isImage } = await this.fileService.generateWatermarkedPreview(token);
 
     if (isImage) {

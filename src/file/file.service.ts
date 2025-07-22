@@ -41,7 +41,8 @@ export class FileService {
                     expiresAt: true,
                     downloadLimit: true,
                     downloadCount: true,
-                    visibility: true
+                    visibility: true,
+                    originalName: true,
                 },
                 orderBy: {
                     createdAt: 'desc',
@@ -533,6 +534,29 @@ export class FileService {
       
         const pdfBytes = await pdfDoc.save();
         return Buffer.from(pdfBytes);
+    }
+
+    async getFilePreviewMeta(token: string) {
+      const fileShare = await this.prisma.fileShare.findUnique({ where: { token } });
+
+      if (!fileShare) throw new NotFoundException('Invalid or expired token');
+      if (fileShare.downloadCount >= fileShare.maxDownload) {
+        throw new ForbiddenException('Download limit reached');
+      };
+      const file = await this.prisma.file.findUnique({ where: { id: fileShare.fileId } });
+      if (!file) throw new NotFoundException('File not found');
+
+      if(new Date() > fileShare.expiresAt){
+        throw new ForbiddenException('File is Expired');
+      }
+      
+      return {
+        id: fileShare.id,
+        maxDownload: fileShare.maxDownload,
+        downloadCount: fileShare.downloadCount,
+        token: fileShare.token,
+        hasPassword: file.visibility === "password_protected" ? true : false
+      }
     }
 
     async generateWatermarkedPreview(token: string): Promise<{ buffer: Buffer; mimeType: string, isImage: boolean }> {
