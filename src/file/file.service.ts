@@ -361,12 +361,23 @@ export class FileService {
         if (!file) {
           throw new NotFoundException('File not found');
         }
+
+        const calculateLimit = (file.downloadLimit || 0) - dto.maxDownload;
+        if(calculateLimit < 0){
+          throw new BadRequestException('Cannot proceed: Maximum download limit has been reached');
+        };
       
         const token = randomBytes(24).toString('hex');
         const shareUrl = `${process.env.FRONTEND_URL}/preview/token/${token}`;
       
         try {
-          const result = await this.prisma.$transaction(async (tx) => {
+          await this.prisma.$transaction(async (tx) => {
+            await tx.file.update({
+              where: { id: dto.fileId },
+              data: {
+                downloadLimit: calculateLimit
+              }
+            })
             const createdShare = await tx.fileShare.create({
               data: {
                 fileId: dto.fileId,
@@ -416,7 +427,7 @@ export class FileService {
         });
     
         if (!share) {
-            throw new NotFoundException('Link tidak ditemukan atau sudah kadaluarsa');
+            throw new NotFoundException('Link not found or expired');
         }
     
         const now = new Date();
@@ -424,7 +435,7 @@ export class FileService {
         const isLimitExceeded = share.downloadCount >= share.maxDownload;
     
         if (isExpired || isLimitExceeded) {
-            throw new ForbiddenException('Link sudah tidak berlaku');
+            throw new ForbiddenException('Link is expired');
         }
 
         return {
@@ -508,11 +519,55 @@ export class FileService {
         });
     }
     
-    async getFileShareLogs(fileId: string) {
-        return this.prisma.fileShareDownloadLog.findMany({
+    async getFileShareList(fileId: string, page: number = 1, limit: number = 10) {      
+      const skip = (page - 1) * limit;
+      const [logs, total] = await Promise.all([
+        this.prisma.fileShare.findMany({
           where: { fileId },
-          orderBy: { createdAt: 'desc' },
-        });
+          select: {
+            email: true,
+            maxDownload: true,
+            downloadCount: true,
+            note: true,
+            expiresAt: true,
+            createdAt: true,
+          },
+          orderBy: {
+            createdAt: 'desc'
+          },
+          skip,
+          take: limit
+        }),
+        this.prisma.fileShare.count({
+          where: { fileId }
+        }),
+      ]);
+
+      if(logs.length === 0){
+        throw new NotFoundException('File Not Found');
+      }
+
+      return {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+        data: logs
+      }
+      // const fileShare = this.prisma.fileShareDownloadLog.findMany({
+      //   where: { fileId },
+      //   select: {
+      //     email: true,
+
+      //   }
+        // orderBy: { createdAt: 'desc' },
+      // });
+      // console.log(fileShare)
+      // return fileShare;
+      // const fileShare = this.prisma.fileShare.findMany({
+      //   where: { fileId }
+      // });
+      // return fileShare;
     }
 
     async generatePdfWithWatermark(inputPath: string, watermarkText: string) {

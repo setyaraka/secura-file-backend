@@ -10,8 +10,7 @@ export class SchedulerService {
 
     constructor(private fileService: FileService) {}
 
-    // @Cron(CronExpression.EVERY_DAY_AT_MIDNIGHT)
-    @Cron('*/3 * * * *')
+    @Cron(CronExpression.EVERY_DAY_AT_MIDNIGHT)
     async handleExpiredFiles() {
         this.logger.log('Running cleanup job for expired files...');
         const expiredFiles = await this.fileService.getExpiredFiles();

@@ -421,7 +421,7 @@ export class FileController {
 
     await this.fileService.logFileShareDownload(file.id, token, req);
 
-    const filePath = join(__dirname, '..', '..', file.url); // atau sesuai path-mu
+    const filePath = join(__dirname, '..', '..', file.url);
     if(!fs.existsSync(filePath)){
       throw new NotFoundException('File Not Found in Server');
     }
@@ -429,9 +429,11 @@ export class FileController {
     return res.download(filePath, file.filename);
   }
 
+  @UseGuards(AuthGuard('jwt'))
   @Get('share/:fileId/logs')
-  async getFileShareLogs(@Param('fileId') fileId: string) {
-    return this.fileService.getFileShareLogs(fileId);
+  async getFileShareLogs(@Param('fileId') fileId: string, @Query() paginationDto: PaginationDto) {
+    const { page, limit } = paginationDto;
+    return this.fileService.getFileShareList(fileId, page, limit);
   }
 
   @UseGuards(AuthGuard('jwt'))
@@ -447,7 +449,6 @@ export class FileController {
     @Request() req,
     @Query() paginationDto: PaginationDto,
   ) {
-
     return this.fileService.getFileLogs(id, req.user.userId, paginationDto.page, paginationDto.limit);
   }
 
