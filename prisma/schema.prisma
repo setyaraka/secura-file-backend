@@ -48,6 +48,7 @@ model FileAccessLog {
   ipAddress String
   userAgent String
   accessedAt DateTime @default(now())
+  email     String?
 }
 
 model FailedAccessLog {
@@ -58,6 +59,7 @@ model FailedAccessLog {
   userAgent  String
   reason     String
   accessedAt DateTime @default(now())
+  email      String?
 }
 
 model FileDeletionFailureLog {

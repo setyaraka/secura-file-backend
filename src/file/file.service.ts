@@ -67,12 +67,13 @@ export class FileService {
         };
     }
 
-    async logFileAccess(fileId: string, ipAddress: string, userAgent: string) {
+    async logFileAccess(fileId: string, ipAddress: string, userAgent: string, email?: string) {
         return this.prisma.fileAccessLog.create({
             data: {
                 fileId,
                 ipAddress,
                 userAgent,
+                email
             },
         });
     }
@@ -95,9 +96,9 @@ export class FileService {
         return { data: logs, total, page, limit, totalPages: Math.ceil(total / limit) };
     }
     
-    async logFailedAccess(fileId: string, ipAddress: string, userAgent: string, reason: string) {
+    async logFailedAccess(fileId: string, ipAddress: string, userAgent: string, reason: string, email?: string) {
         return this.prisma.failedAccessLog.create({
-            data: { fileId, ipAddress, userAgent, reason },
+            data: { fileId, ipAddress, userAgent, reason, email },
         });
     }
 
@@ -141,6 +142,9 @@ export class FileService {
           fs.unlinkSync(filePath);
         }
 
+        await this.prisma.fileShare.deleteMany({ where: { fileId } });
+        await this.prisma.fileAccessLog.deleteMany({ where: { fileId } });
+        await this.prisma.failedAccessLog.deleteMany({ where: { fileId } });
         await this.prisma.file.delete({ where: { id: fileId } });
       
         return { message: 'File deleted successfully' };
@@ -531,6 +535,7 @@ export class FileService {
             note: true,
             expiresAt: true,
             createdAt: true,
+            token: true
           },
           orderBy: {
             createdAt: 'desc'
@@ -554,20 +559,6 @@ export class FileService {
         totalPages: Math.ceil(total / limit),
         data: logs
       }
-      // const fileShare = this.prisma.fileShareDownloadLog.findMany({
-      //   where: { fileId },
-      //   select: {
-      //     email: true,
-
-      //   }
-        // orderBy: { createdAt: 'desc' },
-      // });
-      // console.log(fileShare)
-      // return fileShare;
-      // const fileShare = this.prisma.fileShare.findMany({
-      //   where: { fileId }
-      // });
-      // return fileShare;
     }
 
     async generatePdfWithWatermark(inputPath: string, watermarkText: string) {
@@ -591,19 +582,30 @@ export class FileService {
         return Buffer.from(pdfBytes);
     }
 
-    async getFilePreviewMeta(token: string) {
+    async getFilePreviewMeta(token: string, ipAddress: string, userAgent: string) {
       const fileShare = await this.prisma.fileShare.findUnique({ where: { token } });
 
-      if (!fileShare) throw new NotFoundException('Invalid or expired token');
+      if (!fileShare) {
+        throw new NotFoundException('Invalid or expired token');
+      } 
+
       if (fileShare.downloadCount >= fileShare.maxDownload) {
+        this.logFailedAccess(fileShare.fileId, ipAddress, userAgent, 'Download limit reached', fileShare.email);
         throw new ForbiddenException('Download limit reached');
       };
+
       const file = await this.prisma.file.findUnique({ where: { id: fileShare.fileId } });
-      if (!file) throw new NotFoundException('File not found');
+      if (!file) {
+        this.logFailedAccess(fileShare.fileId, ipAddress, userAgent, 'File not found', fileShare.email);
+        throw new NotFoundException('File not found');
+      } 
 
       if(new Date() > fileShare.expiresAt){
+        this.logFailedAccess(fileShare.fileId, ipAddress, userAgent, 'File is Expired', fileShare.email);
         throw new ForbiddenException('File is Expired');
       }
+
+      this.logFileAccess(fileShare.fileId, ipAddress, userAgent, fileShare.email);
       
       return {
         id: fileShare.id,

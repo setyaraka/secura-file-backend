@@ -316,8 +316,9 @@ export class FileController {
   // }
 
   @Get('preview/token/:token/meta')
-  async getPreviewMeta(@Param('token') token: string) {
-    const meta = await this.fileService.getFilePreviewMeta(token);
+  async getPreviewMeta(@Param('token') token: string, @Res() res: Response,) {
+    const { ipAddress, userAgent } = getRequestInfo(res.req);
+    const meta = await this.fileService.getFilePreviewMeta(token, ipAddress, userAgent);
     return meta;
   }
 
