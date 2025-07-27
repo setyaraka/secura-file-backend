@@ -4,6 +4,7 @@ import { NestExpressApplication } from '@nestjs/platform-express';
 import { ValidationPipe } from '@nestjs/common';
 import { config } from 'dotenv'
 import helmet from 'helmet';
+import rateLimit from 'express-rate-limit';
 
 config();
 
@@ -36,6 +37,16 @@ async function bootstrap() {
       }
     })
   )
+
+  app.use(
+    rateLimit({
+      windowMs: 10 * 60 * 1000, // 10 menit
+      max: 100,
+      standardHeaders: true,
+      legacyHeaders: false,
+      message: 'Too many requests detected from your IP address. Access has been temporarily limited. Please try again later.',
+    }),
+  );
 
   app.useGlobalPipes(
     new ValidationPipe({
