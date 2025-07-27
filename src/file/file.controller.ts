@@ -142,7 +142,10 @@ export class FileController {
     }
 
     await this.fileService.logFileAccess(file.id, req.ip, req.headers['user-agent']);
-    await this.fileService.incrementDownloadCount(file.id);
+
+    if(file.ownerId !== req.user.userId){
+      await this.fileService.incrementDownloadCount(file.id);
+    }
 
     return res.download(filePath, file.filename);
   }
@@ -316,8 +319,8 @@ export class FileController {
   // }
 
   @Get('preview/token/:token/meta')
-  async getPreviewMeta(@Param('token') token: string, @Res() res: Response,) {
-    const { ipAddress, userAgent } = getRequestInfo(res.req);
+  async getPreviewMeta(@Param('token') token: string, @Req() req) {
+    const { ipAddress, userAgent } = getRequestInfo(req);
     const meta = await this.fileService.getFilePreviewMeta(token, ipAddress, userAgent);
     return meta;
   }
@@ -329,7 +332,6 @@ export class FileController {
     @Res() res: Response
   ) {
     const metadata = await this.fileService.getByToken(token);
-    
     if (metadata?.file.visibility === 'password_protected') {
       const isValid = await bcrypt.compare(password || '', metadata?.file.password || '');
       if (!isValid) {
@@ -369,6 +371,9 @@ export class FileController {
   
       res.setHeader('Content-Type', 'text/html');
       return res.send(html);
+    }
+    if(metadata){
+      await this.fileService.incrementDownloadCount(metadata?.fileId);
     }
 
     res.setHeader('Content-Type', mimeType);

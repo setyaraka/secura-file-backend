@@ -62,7 +62,7 @@ export class FileService {
             totalPages: Math.ceil(total / limit),
             data: logs.map((file) => ({
                 ...file,
-                shareLink: `${process.env.LOCAL_URL}/file/download/${file.id}`,
+                shareLink: `${process.env.BASE_URL}/file/download/${file.id}`,
             })),
         };
     }
@@ -276,7 +276,7 @@ export class FileService {
         return {
             message: 'File metadata updated successfully',
             file: updatedFile,
-            shareLink: `${process.env.LOCAL_URL}/file/download/${updatedFile.id}`,
+            shareLink: `${process.env.BASE_URL}/file/download/${updatedFile.id}`,
         };
     }
       
