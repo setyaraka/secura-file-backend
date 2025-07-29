@@ -65,7 +65,7 @@ R2_ENDPOINT=
 R2_PUBLIC_DOMAIN=
 ```
 
-📌 About the Project
+## 📌 About the Project
 This backend powers a secure file-sharing MVP with a strong focus on privacy, traceability, and limited-time access.
 
 It was developed as a hands-on exploration of building document-sharing systems, inspired by platforms like Digify, and includes features such as watermarking, access control, and audit logging to simulate enterprise-grade security workflows.
