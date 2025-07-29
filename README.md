@@ -24,7 +24,6 @@ This is the backend part of a fullstack secure file-sharing project.
 - **Scheduler**: Cron (auto deletion)
 - **Mail**: Resend email API
 - **Cache**: In-memory (via @nestjs/cache-manager)
-- **Testing**: Jest (unit tests)
 
 ---
 
