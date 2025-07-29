@@ -11,6 +11,8 @@ config();
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
 
+  app.set('trust proxy', 1);
+  
   const rawOrigins = process.env.CORS_ORIGIN || '';
   const corsOrigins = rawOrigins.split(',').map(origin => origin.trim());
   
