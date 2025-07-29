@@ -26,6 +26,8 @@ model File {
   filename      String
   originalName  String?
   url           String
+  key           String
+  bucket        String
   ownerId       String
   owner         User             @relation(fields: [ownerId], references: [id])
   accessLogs    FileAccessLog[]

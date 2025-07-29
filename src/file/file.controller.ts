@@ -2,7 +2,7 @@ import { BadRequestException, Body, Controller, Delete, ForbiddenException, Get,
 import { FileService } from './file.service';
 import { AuthGuard } from '@nestjs/passport';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { diskStorage } from 'multer';
+import { diskStorage, memoryStorage } from 'multer';
 import { v4 as uuidv4 } from 'uuid';
 import { extname, join } from 'path';
 import * as fs from 'fs';
@@ -11,37 +11,34 @@ import { getContentType, getRequestInfo } from 'src/utils/request-info';
 import { UpdateFileMetadataDto } from './dto/upload-file.dto';
 import { PaginationDto } from 'src/common/dto/pagination.dto';
 import { UpdateVisibilityDto } from './dto/update-visibility.dto';
-import * as sharp from 'sharp';
 import { CreateFileShareDto } from './dto/create-file-share.dto';
 import { ShareDownloadDto } from './dto/share-download.dto';
 import { Request as ExpressRequest } from 'express';
-import { addImageWatermark, addPdfWatermark } from 'src/utils/watermark.util';
 import * as bcrypt from 'bcrypt';
+import { S3Service } from 'src/s3/s3.service';
 
 @Controller('file')
 export class FileController {
-  constructor(private readonly fileService: FileService) {}
+  constructor(
+    private readonly fileService: FileService,
+    private readonly s3Service: S3Service
+  ) {}
   
   @UseGuards(AuthGuard('jwt'))
   @Post('upload')
   @UseInterceptors(FileInterceptor('file', {
-    storage: diskStorage({
-      destination: './uploads',
-      filename: (req, file, cb) => {
-        const uniqueName = `${uuidv4()}${extname(file.originalname)}`;
-        cb(null, uniqueName);
-      },
-    }),
+    storage: memoryStorage(),
   }))
   async uploadFile(@UploadedFile() file: Express.Multer.File, @Request() req) {
-    const savedFile = await this.fileService.createEmptyFileRecord(file, req.user.userId);
+    const uploaded = await this.s3Service.uploadFile(file);
+    const savedFile = await this.fileService.createEmptyFileRecord(uploaded, req.user.userId);
     const previewUrl = `${process.env.BASE_URL}/file/preview/${savedFile.id}`;
 
     return {
       message: 'File uploaded successfully',
       fileId: savedFile.id,
-      filename: file.originalname,
-      size: file.size,
+      filename: uploaded.originalName,
+      size: uploaded.size,
       previewUrl
     };
   }
@@ -84,10 +81,77 @@ export class FileController {
   }
 
 
+  // @UseGuards(AuthGuard('jwt'))
+  // @Get('secure-download/:id')
+  // async getFile(
+  //   @Param('id') id: string, 
+  //   @Request() req,
+  //   @Res() res: Response,
+  //   @Query('password') password?: string,
+  // ) {
+  //   const { ipAddress, userAgent } = getRequestInfo(req);
+
+  //   const file = await this.fileService.getFileById(id);
+
+  //   if (!file) {
+  //     throw new NotFoundException('File not found');
+  //   }
+
+  //   if (file.ownerId !== req.user.userId ) {
+  //     if (file.password) {
+  //       if (file.password !== password) {
+  //         await this.fileService.logFailedAccess(file.id, ipAddress, userAgent, 'Incorrect password');
+  //         throw new ForbiddenException('Incorrect password for this file');
+  //       }
+  //     } else {
+  //       await this.fileService.logFailedAccess(file.id, ipAddress, userAgent, 'Forbidden access');
+  //       throw new ForbiddenException('You do not have access to this file');
+  //     }
+  //   }
+
+  //   if (file.expiresAt && new Date() > file.expiresAt) {
+  //     await this.fileService.logFailedAccess(id, ipAddress, userAgent, 'File has expired');
+  //     throw new ForbiddenException('File has expired');
+  //   }
+
+  //   if (file.visibility === 'private' && file.ownerId !== req.user.userId) {
+  //     await this.fileService.logFailedAccess(id, ipAddress, userAgent, 'Forbidden access');
+  //     throw new ForbiddenException('You do not have access to this file');
+  //   }
+  
+  //   if (file.visibility === 'password_protected' && file.ownerId !== req.user.userId) {
+  //     if (!password || password !== file.password) {
+  //       await this.fileService.logFailedAccess(id, ipAddress, userAgent, 'Invalid password');
+  //       throw new ForbiddenException('Invalid password');
+  //     }
+  //   }
+
+  //   if (file.downloadLimit !== null && file.downloadCount >= file.downloadLimit) {
+  //     await this.fileService.logFailedAccess(id, ipAddress, userAgent, 'Download limit exceeded');
+  //     throw new ForbiddenException('Download limit exceeded');
+  //   }
+
+  //   const filePath = join(__dirname, '..', '..', 'uploads', file.filename);
+
+  //   if (!fs.existsSync(filePath)) {
+  //     await this.fileService.logFailedAccess(id, ipAddress, userAgent, 'File does not exist on server');
+  //     throw new NotFoundException('File does not exist on server');
+  //   }
+
+  //   await this.fileService.logFileAccess(file.id, req.ip, req.headers['user-agent']);
+
+  //   if(file.ownerId !== req.user.userId){
+  //     await this.fileService.incrementDownloadCount(file.id);
+  //   }
+
+  //   return res.download(filePath, file.filename);
+  // }
+  // file.controller.ts
+
   @UseGuards(AuthGuard('jwt'))
   @Get('secure-download/:id')
-  async getFile(
-    @Param('id') id: string, 
+  async secureDownload(
+    @Param('id') id: string,
     @Request() req,
     @Res() res: Response,
     @Query('password') password?: string,
@@ -95,20 +159,23 @@ export class FileController {
     const { ipAddress, userAgent } = getRequestInfo(req);
 
     const file = await this.fileService.getFileById(id);
+    if (!file) throw new NotFoundException('File not found');
 
-    if (!file) {
-      throw new NotFoundException('File not found');
-    }
+    const isOwner = file.ownerId === req.user.userId;
 
-    if (file.ownerId !== req.user.userId ) {
-      if (file.password) {
-        if (file.password !== password) {
-          await this.fileService.logFailedAccess(file.id, ipAddress, userAgent, 'Incorrect password');
-          throw new ForbiddenException('Incorrect password for this file');
+    if (!isOwner) {
+      if (file.visibility === 'private') {
+        await this.logAndThrowForbidden(file.id, ipAddress, userAgent, 'Forbidden access');
+      }
+
+      if (file.visibility === 'password_protected') {
+        if (!password || password !== file.password) {
+          await this.logAndThrowForbidden(file.id, ipAddress, userAgent, 'Invalid password');
         }
-      } else {
-        await this.fileService.logFailedAccess(file.id, ipAddress, userAgent, 'Forbidden access');
-        throw new ForbiddenException('You do not have access to this file');
+      }
+
+      if (file.password && file.password !== password) {
+        await this.logAndThrowForbidden(file.id, ipAddress, userAgent, 'Incorrect password');
       }
     }
 
@@ -117,37 +184,36 @@ export class FileController {
       throw new ForbiddenException('File has expired');
     }
 
-    if (file.visibility === 'private' && file.ownerId !== req.user.userId) {
-      await this.fileService.logFailedAccess(id, ipAddress, userAgent, 'Forbidden access');
-      throw new ForbiddenException('You do not have access to this file');
-    }
-  
-    if (file.visibility === 'password_protected' && file.ownerId !== req.user.userId) {
-      if (!password || password !== file.password) {
-        await this.fileService.logFailedAccess(id, ipAddress, userAgent, 'Invalid password');
-        throw new ForbiddenException('Invalid password');
-      }
-    }
-
     if (file.downloadLimit !== null && file.downloadCount >= file.downloadLimit) {
       await this.fileService.logFailedAccess(id, ipAddress, userAgent, 'Download limit exceeded');
       throw new ForbiddenException('Download limit exceeded');
     }
 
-    const filePath = join(__dirname, '..', '..', 'uploads', file.filename);
-
-    if (!fs.existsSync(filePath)) {
-      await this.fileService.logFailedAccess(id, ipAddress, userAgent, 'File does not exist on server');
-      throw new NotFoundException('File does not exist on server');
+    const stream = await this.s3Service.streamFile(file.bucket, file.key);
+    const ext = extname(file.filename).toLowerCase();
+    let mimeType = 'application/octet-stream';
+    if (ext === '.pdf') {
+      mimeType = 'application/pdf';
+    } else {
+      mimeType = 'image/png';
     }
+    res.setHeader('Content-Type', mimeType || 'application/octet-stream');
+    res.setHeader('Content-Disposition', `attachment; filename="${file.originalName}"`);
 
-    await this.fileService.logFileAccess(file.id, req.ip, req.headers['user-agent']);
+    await this.fileService.logFileAccess(file.id, ipAddress, userAgent);
+    if (!isOwner) await this.fileService.incrementDownloadCount(file.id);
 
-    if(file.ownerId !== req.user.userId){
-      await this.fileService.incrementDownloadCount(file.id);
-    }
+    return stream.pipe(res);
+  }
 
-    return res.download(filePath, file.filename);
+  private async logAndThrowForbidden(
+    fileId: string,
+    ipAddress: string,
+    userAgent: string,
+    reason: string,
+  ) {
+    await this.fileService.logFailedAccess(fileId, ipAddress, userAgent, reason);
+    throw new ForbiddenException(reason);
   }
 
   @Get('download/:id')
@@ -401,7 +467,7 @@ export class FileController {
   async validateAndPrepareSharedFile(@Res() res: Response, @Query('token') token: string) {
     const { file } = await this.fileService.validateAndPrepareDownload(token);
 
-    const filePath = join(__dirname, '..', '..', 'uploads', file.url); // sesuaikan path folder-mu
+    const filePath = join(__dirname, '..', '..', 'uploads', file.url);
 
     if (!fs.existsSync(filePath)) {
       throw new NotFoundException('File tidak ditemukan');
@@ -427,13 +493,11 @@ export class FileController {
 
     await this.fileService.logFileShareDownload(file.id, token, req);
 
-    const filePath = join(__dirname, '..', '..', file.url);
-    if(!fs.existsSync(filePath)){
-      throw new NotFoundException('File Not Found in Server');
-    }
+    const presignedUrl = await this.s3Service.getPresignedUrl(file.bucket, file.key);
 
-    return res.download(filePath, file.filename);
+    return res.redirect(presignedUrl); // Lebih efisien daripada streaming manual
   }
+
 
   @UseGuards(AuthGuard('jwt'))
   @Get('share/:fileId/logs')

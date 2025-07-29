@@ -13,12 +13,14 @@ import { EmailService } from 'src/email/email.service';
 import { degrees, PDFDocument, rgb } from 'pdf-lib';
 import { addImageWatermark, addPdfWatermark } from 'src/utils/watermark.util';
 import * as dayjs from 'dayjs'
+import { S3Service } from 'src/s3/s3.service';
 
 @Injectable()
 export class FileService {
     constructor (
         private prisma: PrismaService,
-        private emailService: EmailService
+        private emailService: EmailService,
+        private s3Service: S3Service
     ) {}
 
     async getFileById(id: string) {
@@ -137,10 +139,7 @@ export class FileService {
           throw new ForbiddenException('You do not have permission to delete this file');
         }
 
-        const filePath = join(__dirname, '..', '..', 'uploads', file.filename);
-        if (fs.existsSync(filePath)) {
-          fs.unlinkSync(filePath);
-        }
+        await this.s3Service.deleteFile(file.filename);
 
         await this.prisma.fileShare.deleteMany({ where: { fileId } });
         await this.prisma.fileAccessLog.deleteMany({ where: { fileId } });
@@ -234,17 +233,30 @@ export class FileService {
         });
     }
 
-    async createEmptyFileRecord(file: Express.Multer.File, userId: string) {
-        return this.prisma.file.create({
-            data: {
-                filename: file.filename,
-                url: `uploads/${file.filename}`,
-                originalName: file.originalname,
-                ownerId: userId,
-                size: file.size
-            },
-        });
+    async createEmptyFileRecord(
+      uploaded: { 
+        url: string; 
+        filename: string; 
+        originalName: string; 
+        size: number, 
+        key: string,
+        bucket: string
+      },
+      userId: string
+    ) {
+      return this.prisma.file.create({
+        data: {
+          filename: uploaded.filename,
+          originalName: uploaded.originalName,
+          size: uploaded.size,
+          url: uploaded.url,
+          ownerId: userId,
+          key: uploaded.key,
+          bucket: uploaded.bucket
+        }
+      });
     }
+    
 
     async updateFileMetadata(dto: UpdateFileMetadataDto, userId: string) {
         const { fileId, visibility, password, expiresAt, downloadLimit } = dto;
@@ -482,32 +494,33 @@ export class FileService {
     }
 
     async downloadSharedFile(token: string, password?: string) {
-        const share = await this.prisma.fileShare.findUnique({
-          where: { token },
-          include: { file: true },
-        });
-      
-        if (!share) throw new NotFoundException('Link tidak ditemukan');
-      
-        const now = new Date();
-        if (share.expiresAt < now) throw new ForbiddenException('Link sudah expired');
-        if (share.downloadCount >= share.maxDownload) throw new ForbiddenException('Download limit tercapai');
-      
-        const file = share.file;
-      
-        if (file.password) {
-          if (!password) throw new ForbiddenException('Password dibutuhkan');
-          const isMatch = await bcrypt.compare(password, file.password);
-          if (!isMatch) throw new ForbiddenException('Password salah');
-        }
-      
-        await this.prisma.fileShare.update({
-          where: { id: share.id },
-          data: { downloadCount: { increment: 1 } },
-        });
-      
-        return file;
+      const share = await this.prisma.fileShare.findUnique({
+        where: { token },
+        include: { file: true },
+      });
+    
+      if (!share) throw new NotFoundException('Link tidak ditemukan');
+    
+      const now = new Date();
+      if (share.expiresAt < now) throw new ForbiddenException('Link sudah expired');
+      if (share.downloadCount >= share.maxDownload) throw new ForbiddenException('Download limit tercapai');
+    
+      const file = share.file;
+    
+      if (file.password) {
+        if (!password) throw new ForbiddenException('Password dibutuhkan');
+        const isMatch = await bcrypt.compare(password, file.password);
+        if (!isMatch) throw new ForbiddenException('Password salah');
+      }
+    
+      await this.prisma.fileShare.update({
+        where: { id: share.id },
+        data: { downloadCount: { increment: 1 } },
+      });
+    
+      return file; // pastikan `file` punya `bucket`, `key`, dan `filename`
     }
+    
       
     async logFileShareDownload(fileId: string, token: string, req: Request) {
         const ip = req.ip || req.headers['x-forwarded-for'] as string;
@@ -617,40 +630,42 @@ export class FileService {
     }
 
     async generateWatermarkedPreview(token: string): Promise<{ buffer: Buffer; mimeType: string, isImage: boolean }> {
-        const fileShare = await this.prisma.fileShare.findUnique({ where: { token } });
-        if (!fileShare) throw new NotFoundException('Invalid or expired token');
-      
-        if (fileShare.downloadCount >= fileShare.maxDownload) {
-          throw new ForbiddenException('Download limit reached');
-        }
-      
-        const file = await this.prisma.file.findUnique({ where: { id: fileShare.fileId } });
-        if (!file) throw new NotFoundException('File not found');
-      
-        const filePath = join(__dirname, '..', '..', 'uploads', file.filename);
-        const buffer = fs.readFileSync(filePath);
-        const timestamp = dayjs().format('DD MMM YYYY, HH:mm:ss');
-      
-        const ext = extname(file.filename).toLowerCase();
-        let watermarked: Buffer;
-        let mimeType = 'application/octet-stream';
-        let isImage = false;
-      
-        if (ext === '.pdf') {
-          watermarked = await addPdfWatermark(buffer, fileShare.email, timestamp);
-          mimeType = 'application/pdf';
-        } else {
-          watermarked = await addImageWatermark(buffer, fileShare.email, timestamp);
-          mimeType = 'image/png';
-          isImage = true;
-        }
-      
-        // Update download count
-        await this.prisma.fileShare.update({
-          where: { token },
-          data: { downloadCount: { increment: 1 } },
-        });
-      
-        return { buffer: watermarked, mimeType, isImage };
-    }
+      const fileShare = await this.prisma.fileShare.findUnique({ where: { token } });
+      if (!fileShare) throw new NotFoundException('Invalid or expired token');
+    
+      if (fileShare.downloadCount >= fileShare.maxDownload) {
+        throw new ForbiddenException('Download limit reached');
+      }
+    
+      const file = await this.prisma.file.findUnique({ where: { id: fileShare.fileId } });
+      if (!file) throw new NotFoundException('File not found');
+    
+      const buffer = await this.s3Service.getObject(file.filename);
+      const timestamp = dayjs().format('DD MMM YYYY, HH:mm:ss');
+    
+      const ext = extname(file.filename).toLowerCase();
+      let watermarked: Buffer;
+      let mimeType = 'application/octet-stream';
+      let isImage = false;
+    
+      if (ext === '.pdf') {
+        watermarked = await addPdfWatermark(buffer, fileShare.email, timestamp);
+        mimeType = 'application/pdf';
+      } else {
+        watermarked = await addImageWatermark(buffer, fileShare.email, timestamp);
+        mimeType = 'image/png';
+        isImage = true;
+      }
+    
+      await this.prisma.fileShare.update({
+        where: { token },
+        data: { downloadCount: { increment: 1 } },
+      });
+    
+      return { buffer: watermarked, mimeType, isImage };
+    }   
+    
+    async deleteFromS3(filename: string) {
+      await this.s3Service.deleteFile(filename);
+    }    
 }
