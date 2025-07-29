@@ -47,6 +47,7 @@ This is the backend part of a fullstack secure file-sharing project.
 npm install
 npx prisma generate
 npm run start:dev
+```
 
 Create a .env file with the following variables:
 DATABASE_URL=
