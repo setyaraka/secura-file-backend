@@ -50,6 +50,7 @@ npm run start:dev
 ```
 
 Create a .env file with the following variables:
+```
 DATABASE_URL=
 JWT_SECRET=
 BASE_URL=
@@ -62,6 +63,7 @@ R2_SECRET_ACCESS_KEY=
 R2_BUCKET_NAME=
 R2_ENDPOINT=
 R2_PUBLIC_DOMAIN=
+```
 
 📌 About the Project
 This backend powers a secure file-sharing MVP with a strong focus on privacy, traceability, and limited-time access.
