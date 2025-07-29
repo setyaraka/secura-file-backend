@@ -1,4 +1,4 @@
-import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from 'src/prisma/prisma.service';
 import * as fs from 'fs';
 import { promises as fsAsync } from 'fs';
@@ -14,13 +14,15 @@ import { degrees, PDFDocument, rgb } from 'pdf-lib';
 import { addImageWatermark, addPdfWatermark } from 'src/utils/watermark.util';
 import * as dayjs from 'dayjs'
 import { S3Service } from 'src/s3/s3.service';
+import { Cache, CACHE_MANAGER } from '@nestjs/cache-manager';
 
 @Injectable()
 export class FileService {
     constructor (
         private prisma: PrismaService,
         private emailService: EmailService,
-        private s3Service: S3Service
+        private s3Service: S3Service,
+        @Inject(CACHE_MANAGER) private cacheManager: Cache,
     ) {}
 
     async getFileById(id: string) {
@@ -629,25 +631,37 @@ export class FileService {
       }
     }
 
-    async generateWatermarkedPreview(token: string): Promise<{ buffer: Buffer; mimeType: string, isImage: boolean }> {
+    async generateWatermarkedPreview(
+      token: string,
+    ): Promise<{ buffer: Buffer; mimeType: string; isImage: boolean }> {
+      const cacheKey = `preview:${token}`;
+      const cached = await this.cacheManager.get<{ buffer: string; mimeType: string; isImage: boolean }>(cacheKey);
+      if (cached) {
+        return {
+          buffer: Buffer.from(cached.buffer, 'base64'),
+          mimeType: cached.mimeType,
+          isImage: cached.isImage,
+        };
+      }
+  
       const fileShare = await this.prisma.fileShare.findUnique({ where: { token } });
       if (!fileShare) throw new NotFoundException('Invalid or expired token');
-    
+  
       if (fileShare.downloadCount >= fileShare.maxDownload) {
         throw new ForbiddenException('Download limit reached');
       }
-    
+  
       const file = await this.prisma.file.findUnique({ where: { id: fileShare.fileId } });
       if (!file) throw new NotFoundException('File not found');
-    
+  
       const buffer = await this.s3Service.getObject(file.filename);
       const timestamp = dayjs().format('DD MMM YYYY, HH:mm:ss');
-    
+  
       const ext = extname(file.filename).toLowerCase();
       let watermarked: Buffer;
       let mimeType = 'application/octet-stream';
       let isImage = false;
-    
+  
       if (ext === '.pdf') {
         watermarked = await addPdfWatermark(buffer, fileShare.email, timestamp);
         mimeType = 'application/pdf';
@@ -656,14 +670,24 @@ export class FileService {
         mimeType = 'image/png';
         isImage = true;
       }
-    
+  
+      await this.cacheManager.set(
+        cacheKey,
+        {
+          buffer: watermarked.toString('base64'),
+          mimeType,
+          isImage,
+        },
+        60,
+      );
+  
       await this.prisma.fileShare.update({
         where: { token },
         data: { downloadCount: { increment: 1 } },
       });
-    
+  
       return { buffer: watermarked, mimeType, isImage };
-    }   
+    }
     
     async deleteFromS3(filename: string) {
       await this.s3Service.deleteFile(filename);

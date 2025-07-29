@@ -10,12 +10,23 @@ import { EmailService } from './email/email.service';
 import { EmailModule } from './email/email.module';
 import { PreviewService } from './preview/preview.service';
 import { S3Module } from './s3/s3.module';
+import { CacheModule } from '@nestjs/cache-manager';
 
 @Module({
-  imports: [UserModule, AuthModule, 
+  imports: [
+    UserModule, 
+    AuthModule, 
     ConfigModule.forRoot({
       isGlobal: true
-    }), FileModule, SchedulerModule, EmailModule, S3Module,
+    }), 
+    FileModule, 
+    SchedulerModule, 
+    EmailModule, 
+    S3Module,
+    CacheModule.register({
+      isGlobal: true,
+      ttl: 60
+    })
   ],
   controllers: [AppController],
   providers: [AppService, EmailService, PreviewService],
