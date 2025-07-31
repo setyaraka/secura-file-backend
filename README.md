@@ -1,4 +1,4 @@
-# 🔐 Secura File – Backend
+# 🔐 Vaultiva – Backend
 
 Backend service for a secure document-sharing platform,  
 **inspired by the concept and use cases of tools like Digify**.
