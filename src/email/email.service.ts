@@ -40,7 +40,7 @@ export class EmailService {
                             </div>`
             
             const result = await this.resend.emails.send({
-                from: 'onboarding@resend.dev',
+                from: 'noreply@vaultiva.cloud',
                 to,
                 subject,
                 html,
