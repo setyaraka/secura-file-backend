@@ -10,7 +10,7 @@ Built with NestJS, PostgreSQL, Prisma, and integrated with Cloudflare R2 for obj
 ## 🔗 Related Repository
 
 This is the backend part of a fullstack secure file-sharing project.  
-👉 Frontend repo: [secura-file-frontend](https://github.com/setyaraka/secura-file-frontend)
+👉 Frontend repo: [vaultiva-frontend](https://github.com/setyaraka/vaultiva-frontend)
 
 ---
 
