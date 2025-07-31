@@ -1,7 +1,6 @@
 # 🔐 Vaultiva – Backend
 
-Backend service for a secure document-sharing platform,  
-**inspired by the concept and use cases of tools like Digify**.
+NestJS backend for secure document sharing, featuring password-protected access, watermarking, file expiration, and detailed access logging, built for privacy-focused workflows.
 
 Built with NestJS, PostgreSQL, Prisma, and integrated with Cloudflare R2 for object storage.
 
@@ -21,8 +20,8 @@ This is the backend part of a fullstack secure file-sharing project.
 - **Storage**: Cloudflare R2 (via AWS SDK)
 - **Security**: Helmet.js (CSP), CORS
 - **Utilities**: Multer, Sharp (image watermark), PDF-lib (PDF watermark)
-- **Scheduler**: Cron (auto deletion)
-- **Mail**: Resend email API
+- **Scheduler**: Cron (via @nestjs/schedule)
+- **Mail Service**: Resend
 - **Cache**: In-memory (via @nestjs/cache-manager)
 
 ---
@@ -51,21 +50,38 @@ npm run start:dev
 
 Create a .env file with the following variables:
 ```
-DATABASE_URL=
-JWT_SECRET=
-BASE_URL=
-FRONTEND_URL=
-RESEND_API_KEY=
-CORS_ORIGIN=
+DATABASE_URL=postgresql://user:password@host:port/dbname
+JWT_SECRET=supersecret
+BASE_URL=https://your-backend-url.com
+FRONTEND_URL=https://your-frontend-url.com
+RESEND_API_KEY=your_resend_key
 
-R2_ACCESS_KEY_ID=
-R2_SECRET_ACCESS_KEY=
-R2_BUCKET_NAME=
-R2_ENDPOINT=
-R2_PUBLIC_DOMAIN=
+R2_ACCESS_KEY_ID=your_key
+R2_SECRET_ACCESS_KEY=your_secret
+R2_BUCKET_NAME=your_bucket
+R2_ENDPOINT=https://r2.cloudflarestorage.com
+R2_PUBLIC_DOMAIN=https://your-bucket.r2.dev
+CORS_ORIGIN=https://vaultiva.cloud
 ```
 
 ## 📌 About the Project
-This backend powers a secure file-sharing MVP with a strong focus on privacy, traceability, and limited-time access.
+This backend powers Vaultiva, a secure file-sharing MVP built for showcasing enterprise-grade privacy controls, file tracking, and lifecycle management.
 
-It was developed as a hands-on exploration of building document-sharing systems, inspired by platforms like Digify, and includes features such as watermarking, access control, and audit logging to simulate enterprise-grade security workflows.
+It simulates real-world scenarios like:
+
+- Limited-time file access
+- Traceable access logs with IP/user-agent
+- PDF/image watermarking
+- Secure download flows with audit support
+
+## 🎯 Why This Project Matters
+Vaultiva backend is designed to explore production-level challenges in:
+
+- 🛡️ File protection and metadata tracking
+- 🧠 Combining image & PDF watermarking with conditional access
+- 🧾 Logging every download access for accountability
+- ⏳ Auto-cleanup of expired files
+
+This project serves as a backend foundation for secure, trackable document workflows.
+
+
