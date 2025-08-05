@@ -16,12 +16,16 @@ import { ShareDownloadDto } from './dto/share-download.dto';
 import { Request as ExpressRequest } from 'express';
 import * as bcrypt from 'bcrypt';
 import { S3Service } from 'src/s3/s3.service';
+import { HttpService } from '@nestjs/axios';
+import { lastValueFrom } from 'rxjs';
+
 
 @Controller('file')
 export class FileController {
   constructor(
     private readonly fileService: FileService,
-    private readonly s3Service: S3Service
+    private readonly s3Service: S3Service,
+    private readonly httpService: HttpService
   ) {}
   
   @UseGuards(AuthGuard('jwt'))
@@ -32,14 +36,22 @@ export class FileController {
   async uploadFile(@UploadedFile() file: Express.Multer.File, @Request() req) {
     const uploaded = await this.s3Service.uploadFile(file);
     const savedFile = await this.fileService.createEmptyFileRecord(uploaded, req.user.userId);
-    const previewUrl = `${process.env.BASE_URL}/file/preview/${savedFile.id}`;
+    const findFile = await this.fileService.findFileByIdAndOwner(savedFile.id, req.user.userId);
+
+    if (!findFile) throw new ForbiddenException('Access denied');
+
+    if (findFile.expiresAt && findFile.expiresAt < new Date()) {
+      throw new ForbiddenException('File has expired');
+    }
+
+    const signedUrl = await this.s3Service.generateSignedUrl(findFile.key);
 
     return {
       message: 'File uploaded successfully',
       fileId: savedFile.id,
       filename: uploaded.originalName,
       size: uploaded.size,
-      previewUrl
+      previewUrl: signedUrl,
     };
   }
 
@@ -80,6 +92,20 @@ export class FileController {
     return this.fileService.getUserStats(req.user.userId);
   }
 
+  @UseGuards(AuthGuard('jwt'))
+  @Get('proxy/:id')
+  async proxyFile(@Param('id') id: string, @Res() res: Response, @Request() req) {
+    const file = await this.fileService.findFileByIdAndOwner(id, req.user.userId);
+    if (!file) throw new ForbiddenException();
+
+    const fileUrl = await this.s3Service.generateSignedUrl(file.key);
+
+    const stream$ = this.httpService.get(fileUrl, { responseType: 'stream' });
+    const streamRes = await lastValueFrom(stream$);
+
+    res.setHeader('Content-Type', streamRes.headers['content-type']);
+    streamRes.data.pipe(res);
+  }
 
   // @UseGuards(AuthGuard('jwt'))
   // @Get('secure-download/:id')

@@ -91,22 +91,31 @@ export class S3Service {
     return url;
   }
 
-  // s3.service.ts
-
-    async streamFile(bucket: string, key: string): Promise<Readable> {
-        const command = new GetObjectCommand({
-            Bucket: bucket,
-            Key: key,
-        });
-    
-        const response = await this.s3Client.send(command);
-    
-        if (!response.Body) {
-        throw new Error('File body is empty');
-        }
-    
-        return response.Body as Readable;
-    }
+  async streamFile(bucket: string, key: string): Promise<Readable> {
+      const command = new GetObjectCommand({
+          Bucket: bucket,
+          Key: key,
+      });
   
+      const response = await this.s3Client.send(command);
   
+      if (!response.Body) {
+      throw new Error('File body is empty');
+      }
+  
+      return response.Body as Readable;
+  }
+  
+  async generateSignedUrl(key: string): Promise<string> {
+    const command = new GetObjectCommand({
+      Bucket: this.bucketName,
+      Key: key,
+    });
+  
+    const signedUrl = await getSignedUrl(this.s3Client, command, {
+      expiresIn: 60 * 5 // expired dalam 5 menit
+    });
+  
+    return signedUrl;
+  }
 }

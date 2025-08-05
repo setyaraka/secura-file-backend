@@ -691,5 +691,14 @@ export class FileService {
     
     async deleteFromS3(filename: string) {
       await this.s3Service.deleteFile(filename);
-    }    
+    }
+
+    async findFileByIdAndOwner(fileId: string, userId: string) {
+      return this.prisma.file.findFirst({
+        where: {
+          id: fileId,
+          ownerId: userId,
+        },
+      });
+    }
 }
