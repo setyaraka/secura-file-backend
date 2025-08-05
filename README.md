@@ -83,10 +83,18 @@ It simulates real-world enterprise scenarios with:
 ## 🎯 Why This Project Matters
 
 This backend explores production-level concerns in:
+
 - 🛡️ File protection & access tracking
 - 🔐 Conditional file visibility and expiration
 - 🧠 Watermarking engine for various file types
 - 📈 Download tracking & lifecycle management
 - 🧹 Automatic cleanup of expired resources
   
-    Vaultiva backend is a solid foundation for any application requiring secure, auditable, and privacy-first document workflows.
+Vaultiva backend is a solid foundation for any application requiring secure, auditable, and privacy-first document workflows.
+
+---
+
+## 🙋 Feedback
+
+Have thoughts or found a bug?
+Feel free to open an issue for any suggestions or questions.
