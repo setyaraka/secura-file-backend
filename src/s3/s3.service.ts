@@ -113,7 +113,7 @@ export class S3Service {
     });
   
     const signedUrl = await getSignedUrl(this.s3Client, command, {
-      expiresIn: 60 * 5 // expired dalam 5 menit
+      expiresIn: 60 * 5
     });
   
     return signedUrl;
