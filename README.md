@@ -1,54 +1,58 @@
 # 🔐 Vaultiva – Backend
 
-NestJS backend for secure document sharing, featuring password-protected access, watermarking, file expiration, and detailed access logging, built for privacy-focused workflows.
+A secure, production-grade NestJS backend for document sharing — supporting password protection, watermarking, file expiration, and detailed access logging.
 
-Built with NestJS, PostgreSQL, Prisma, and integrated with Cloudflare R2 for object storage.
+> ⚙️ Built with NestJS, PostgreSQL, Prisma, and integrated with Cloudflare R2 for object storage.
 
 ---
 
 ## 🔗 Related Repository
 
-This is the backend part of a fullstack secure file-sharing project.  
+This is the **backend** of a fullstack secure file-sharing project.
+
 👉 Frontend repo: [vaultiva-frontend](https://github.com/setyaraka/vaultiva-frontend)
 
 ---
 
 ## 🧰 Tech Stack
 
-- **Framework**: NestJS
-- **Database**: PostgreSQL + Prisma ORM
-- **Storage**: Cloudflare R2 (via AWS SDK)
-- **Security**: Helmet.js (CSP), CORS
-- **Utilities**: Multer, Sharp (image watermark), PDF-lib (PDF watermark)
-- **Scheduler**: Cron (via @nestjs/schedule)
-- **Mail Service**: Resend
-- **Cache**: In-memory (via @nestjs/cache-manager)
+| Layer        | Technology                         |
+|--------------|-------------------------------------|
+| Framework    | NestJS                              |
+| Database     | PostgreSQL + Prisma ORM             |
+| Storage      | Cloudflare R2 (via AWS SDK)         |
+| Security     | Helmet.js (CSP), CORS               |
+| Upload Tools | Multer, Sharp, PDF-lib              |
+| Scheduling   | Cron (via `@nestjs/schedule`)       |
+| Mail Service | Resend                              |
+| Caching      | In-memory (`@nestjs/cache-manager`) |
 
 ---
 
 ## 🔐 Key Features
 
-- JWT-based Authentication
-- File Upload & Secured Download Endpoint
-- Password-Protected File Sharing
-- Watermarking (Image & PDF)
-- File Visibility: Public, Protected, Private
-- Audit Logging (Email, IP, User Agent)
-- Download Statistics (views/downloads)
-- Auto Deletion via Cron Job
-- RESTful API for Angular frontend
+- ✅ JWT-based Authentication
+- 📁 File Upload & Secured Download Endpoint
+- 🔒 Password-Protected File Sharing
+- 🖋️ Watermarking (Image & PDF)
+- 🔍 File Visibility: Public, Protected, Private
+- 🧾 Audit Logging (Email, IP, User Agent)
+- 📊 Download Stats: Views & Downloads
+- 🧹 Auto File Deletion via Cron Job
+- 🔗 RESTful API for Angular Frontend
 
 ---
 
-## 🛠️ Setup
+## 🛠️ Getting Started
 
 ```bash
 npm install
 npx prisma generate
 npm run start:dev
 ```
+---
 
-Create a .env file with the following variables:
+### 📄 Create .env file with the following:
 ```
 DATABASE_URL=postgresql://user:password@host:port/dbname
 JWT_SECRET=supersecret
@@ -63,25 +67,34 @@ R2_ENDPOINT=https://r2.cloudflarestorage.com
 R2_PUBLIC_DOMAIN=https://your-bucket.r2.dev
 CORS_ORIGIN=https://vaultiva.cloud
 ```
+---
 
 ## 📌 About the Project
-This backend powers Vaultiva, a secure file-sharing MVP built for showcasing enterprise-grade privacy controls, file tracking, and lifecycle management.
 
-It simulates real-world scenarios like:
+Vaultiva backend powers a secure file-sharing platform designed for privacy-focused workflows.
+It simulates real-world enterprise scenarios with:
+- ⏳ Limited-time file access
+- 🧾 Full audit logs (IP, email, user agent)
+- 🖋️ PDF/Image watermarking
+- 🔒 Secured download flows with conditional access
 
-- Limited-time file access
-- Traceable access logs with IP/user-agent
-- PDF/image watermarking
-- Secure download flows with audit support
+---
 
 ## 🎯 Why This Project Matters
-Vaultiva backend is designed to explore production-level challenges in:
 
-- 🛡️ File protection and metadata tracking
-- 🧠 Combining image & PDF watermarking with conditional access
-- 🧾 Logging every download access for accountability
-- ⏳ Auto-cleanup of expired files
+This backend explores production-level concerns in:
 
-This project serves as a backend foundation for secure, trackable document workflows.
+- 🛡️ File protection & access tracking
+- 🔐 Conditional file visibility and expiration
+- 🧠 Watermarking engine for various file types
+- 📈 Download tracking & lifecycle management
+- 🧹 Automatic cleanup of expired resources
+  
+Vaultiva backend is a solid foundation for any application requiring secure, auditable, and privacy-first document workflows.
 
+---
 
+## 🙋 Feedback
+
+Have thoughts or found a bug?
+Feel free to open an issue for any suggestions or questions.
