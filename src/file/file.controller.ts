@@ -82,8 +82,8 @@ export class FileController {
   @Get('my-files')
   async getMyFiles(@Request() req, @Query() paginationDto: PaginationDto) {
     const userId = req.user.userId;
-    
-    return this.fileService.getFilesByUser(userId, paginationDto.page, paginationDto.limit);
+    const fileByUser = await this.fileService.getFilesByUser(userId, paginationDto.page, paginationDto.limit);
+    return fileByUser;
   }
 
   @UseGuards(AuthGuard('jwt'))

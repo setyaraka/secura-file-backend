@@ -40,13 +40,13 @@ export class FileService {
                 select: {
                     id: true,
                     filename: true,
-                    url: true,
                     createdAt: true,
                     expiresAt: true,
                     downloadLimit: true,
                     downloadCount: true,
                     visibility: true,
                     originalName: true,
+                    key: true
                 },
                 orderBy: {
                     createdAt: 'desc',
@@ -58,16 +58,25 @@ export class FileService {
                 where: { ownerId: userId },
             }),
         ]);
+
+        const files = await Promise.all(
+          logs.map(async (file) => {
+            const { key, ...rest } = file;
+            const signedUrl = await this.s3Service.generateSignedUrl(key);
+            return {
+              ...rest,
+              shareLink: `${process.env.BASE_URL}/file/download/${file.id}`,
+              url: signedUrl
+            };
+          })
+        );
         
         return {
             total,
             page,
             limit,
             totalPages: Math.ceil(total / limit),
-            data: logs.map((file) => ({
-                ...file,
-                shareLink: `${process.env.BASE_URL}/file/download/${file.id}`,
-            })),
+            data: files
         };
     }
 
