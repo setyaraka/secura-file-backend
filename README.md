@@ -32,7 +32,8 @@ This is the **backend** of a fullstack secure file-sharing project.
 ## 🔐 Key Features
 
 - ✅ JWT-based Authentication
-- 📁 File Upload & Secured Download Endpoint
+- 📁 File Upload & Secured Download Endpoint (via Cloudflare Signed URL)
+- ⏳ Time-limited access for private files (5-minute signed URLs)
 - 🔒 Password-Protected File Sharing
 - 🖋️ Watermarking (Image & PDF)
 - 🔍 File Visibility: Public, Protected, Private
@@ -42,6 +43,16 @@ This is the **backend** of a fullstack secure file-sharing project.
 - 🔗 RESTful API for Angular Frontend
 
 ---
+
+## 🔐 Cloudflare Signed URL for Secure Access
+
+Vaultiva uses **Cloudflare R2 Signed URLs** to serve private files securely with time-limited access.
+
+- Signed URLs are generated using `@aws-sdk/s3-request-presigner`, valid for 5 minutes.
+- Prevents direct public access to Cloudflare R2 buckets.
+- Used in download and preview endpoints for safer, temporary file delivery.
+
+> Example: When a user accesses a shared file, the backend returns a signed URL that's valid for a short time, protecting the actual object storage from exposure.
 
 ## 🛠️ Getting Started
 
