@@ -1,5 +1,10 @@
 # 🔐 Vaultiva – Backend
 
+![MIT License](https://img.shields.io/badge/license-MIT-green)
+![NestJS](https://img.shields.io/badge/framework-NestJS-red)
+![Cloudflare R2](https://img.shields.io/badge/storage-Cloudflare%20R2-blue)
+![Status](https://img.shields.io/badge/status-In%20Progress-yellow)
+
 > ⚠️ This project is a personal open-source showcase. Vaultiva is not a commercial SaaS, but a demonstration of secure file-sharing app development best practices.
 
 A secure, production-grade NestJS backend for document sharing — supporting password protection, watermarking, file expiration, and detailed access logging.
@@ -148,3 +153,21 @@ Vaultiva is built with a long-term plan to gradually enhance document protection
 
 Have thoughts or found a bug?
 Feel free to open an issue for any suggestions or questions.
+
+---
+
+## ⚠️ License & Usage
+
+This project is licensed under the [MIT License](./LICENSE).
+
+> Vaultiva is a **personal open-source showcase**, not a commercial SaaS product.  
+> You may explore or fork the code for educational purposes.  
+> **Commercial use, resale, or republishing without permission is prohibited.**
+
+For inquiries or collaborations, feel free to contact me.
+
+---
+
+## 🤝 Let's Connect
+Reach me via [LinkedIn](https://www.linkedin.com/in/setyapanggarakapangestu)  
+or email: setyarakap@gmail.com
