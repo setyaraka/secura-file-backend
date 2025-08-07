@@ -1,5 +1,7 @@
 # 🔐 Vaultiva – Backend
 
+> ⚠️ This project is a personal open-source showcase. Vaultiva is not a commercial SaaS, but a demonstration of secure file-sharing app development best practices.
+
 A secure, production-grade NestJS backend for document sharing — supporting password protection, watermarking, file expiration, and detailed access logging.
 
 > ⚙️ Built with NestJS, PostgreSQL, Prisma, and integrated with Cloudflare R2 for object storage.
