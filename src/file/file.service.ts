@@ -32,6 +32,20 @@ export class FileService {
         });
     }
 
+    async getFileDetail(id: string) {
+      return this.prisma.file.findUnique({
+        where: { id },
+        select: {
+          id: true,
+          originalName: true,
+          visibility: true,
+          downloadLimit: true,
+          expiresAt: true,
+          size: true,
+        }
+      })
+    }
+
     async getFilesByUser(userId: string, page = 1, limit = 10) {
         const skip = (page - 1) * limit;
         const [logs, total] = await Promise.all([

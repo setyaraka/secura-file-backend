@@ -558,4 +558,10 @@ export class FileController {
     return this.fileService.updateFileVisibility(id, req.user.userId, updateVisibilityDto);
   }
 
+  @UseGuards(AuthGuard('jwt'))
+  @Get(':id')
+  async getFileDetail(@Param('id') id: string){
+    return this.fileService.getFileDetail(id);
+  }
+
 }
