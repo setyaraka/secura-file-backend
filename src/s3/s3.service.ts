@@ -8,14 +8,15 @@ import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 @Injectable()
 export class S3Service {
   private s3Client: S3Client;
-  private bucketName = 'secura-file';
+  private bucketName: string;
 
   constructor() {
     const accessKeyId = process.env.R2_ACCESS_KEY_ID;
     const secretAccessKey = process.env.R2_SECRET_ACCESS_KEY;
     const endpoint = process.env.R2_ENDPOINT;
+    this.bucketName = process.env.R2_BUCKET_NAME || "";
 
-    if (!accessKeyId || !secretAccessKey || !endpoint) {
+    if (!accessKeyId || !secretAccessKey || !endpoint || !this.bucketName) {
       throw new Error('Missing R2 credentials in environment variables');
     }
 
